@@ -67,7 +67,12 @@ async def download_and_send_stories(cl: Client) -> None:
             file_path = os.path.join(DOWNLOAD_DIR, filename)
             if os.path.isfile(file_path):
                 os.remove(file_path)
+        for filename in os.listdir("created_images"):
+            file_path = os.path.join("created_images", filename)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
         print("📁 Cartella stories scaricate pulita.")
+        print("📁 Cartella created_images scaricate pulita.")
 
         # --- Scarica stories ---
         try:
