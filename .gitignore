@@ -2,3 +2,4 @@ venv/
 .DS_store
 .env
 __pycache__
+ig_session.json
