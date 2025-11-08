@@ -1,0 +1,18 @@
+# Development requirements
+# Installa con: pip install -r requirements-dev.txt
+
+-r requirements.txt
+
+# Testing
+pytest==8.4.2
+pytest-asyncio==0.21.1
+pytest-cov==7.0.0
+
+# Code quality
+black==23.12.1
+pylint==3.0.3
+mypy==1.7.1
+flake8==6.1.0
+
+# Type stubs
+types-requests==2.31.0.10
