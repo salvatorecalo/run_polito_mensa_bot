@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  # === Development Container ===
+  devcontainer:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - .:/workspaces/run_polito_mensa_bot:cached
+      - vscode-server-extensions:/home/vscode/.vscode-server/extensions
+      - vscode-server-insiders-extensions:/home/vscode/.vscode-server-insiders/extensions
+    working_dir: /workspaces/run_polito_mensa_bot
+    command: sleep infinity
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://polito_mensa:polito_mensa_password@postgresql:5432/polito_mensa
+      - DATABASE_URL_SYNC=postgresql://polito_mensa:polito_mensa_password@postgresql:5432/polito_mensa
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgresql
+      - redis
+    networks:
+      - polito_network
+
+  # === Database Services ===
+  # PostgreSQL Database
+  postgresql:
+    image: postgres:16-alpine
+    container_name: polito_postgresql
+    environment:
+      POSTGRES_DB: polito_mensa
+      POSTGRES_USER: polito_mensa
+      POSTGRES_PASSWORD: polito_mensa_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - polito_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U polito_mensa -d polito_mensa"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for Celery
+  redis:
+    image: redis:7-alpine
+    container_name: polito_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - polito_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PgAdmin (optional - per gestione database via web)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    networks:
+      - polito_network
+    depends_on:
+      - postgresql
+    profiles:
+      - tools  # Avvia solo con: docker-compose --profile tools up
+
+  # Redis Commander (optional - per gestione Redis via web)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    networks:
+      - polito_network
+    depends_on:
+      - redis
+    profiles:
+      - tools  # Avvia solo con: docker-compose --profile tools up
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  vscode-server-extensions:
+  vscode-server-insiders-extensions:
+
+networks:
+  polito_network:
+    driver: bridge

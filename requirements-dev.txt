@@ -7,12 +7,26 @@
 pytest==8.4.2
 pytest-asyncio==0.21.1
 pytest-cov==7.0.0
+pytest-mock==3.11.1
+factory-boy==3.3.0  # Test data factories
 
 # Code quality
 black==23.12.1
-pylint==3.0.3
+isort==5.13.2
 mypy==1.7.1
 flake8==6.1.0
+pre-commit==3.8.0
 
 # Type stubs
-types-requests==2.31.0.10
+types-requests==2.31.0.20231231
+types-setuptools==69.0.0.20240125
+
+# Development utilities
+ipython==8.17.2
+rich==13.9.4
+typer==0.12.5
+
+# Database development
+pgcli==4.0.1  # PostgreSQL CLI with autocompletion
+sqlalchemy-utils==0.41.1  # Database utilities
+pytest-postgresql==6.0.0  # Testing with PostgreSQL
