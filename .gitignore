@@ -3,13 +3,7 @@ venv/
 .DS_store
 .env
 __pycache__
-data/ig_session.json
-data/subscribers.json
-stories/
-created_images/
-downloads/
-download/
-test_image.jpg
+data/
 *.pyc
 *.pyo
 *.log
