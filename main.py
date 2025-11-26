@@ -1,182 +1,199 @@
 """
-Main entry point del bot Polito Mensa
+Main entry point for the Polito Mensa Bot
 """
-import os
-import sys
-import signal
-import asyncio
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ChatMemberHandler, filters
-from telegram import Update
-from telegram.ext import ContextTypes
 
-from config import TELEGRAM_TOKEN, DOWNLOAD_DIR, CREATED_IMAGES_DIR
-from services import InstagramService
-from bot import start_command, cancel_command, help_command, BotScheduler
-from core import download_and_send_stories 
-from data.subscribers import load_subscribers, save_subscribers
+import asyncio
+import logging
+import signal
+import sys
+
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    ChatMemberHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
+
+from bot.handlers import cancel_command, menu_command, start_command
+from bot.scheduler import BotScheduler
+from config import TELEGRAM_TOKEN
+from database.connection import close_db, create_db_and_tables, get_session, init_db
+from database.repositories import UserRepository
+from services.notification_service import NotificationService
+from services.scraper_service import fetch_and_store_menus
 from utils.logger import setup_logger
 
+# Setup Logger
 logger = setup_logger(__name__)
 
-# Variabili globali per la gestione dello shutdown
+# Global variables
 scheduler = None
 app = None
-shutdown_event = asyncio.Event()
 
-# Crea directory necessarie
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-os.makedirs(CREATED_IMAGES_DIR, exist_ok=True)
-os.makedirs("data", exist_ok=True)  
 
-async def bot_added_to_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handler quando il bot viene aggiunto a un gruppo"""
+async def bot_added_to_group(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handler when bot is added to a group"""
     chat = update.effective_chat
-    subscribers = load_subscribers()
-    
-    if chat and chat.id not in subscribers:
-        subscribers.append(chat.id)
-        save_subscribers(subscribers)
-        
+    if not chat:
+        return
+
+    async for session in get_session():
+        repo = UserRepository(session)
+        await repo.get_or_create(
+            telegram_id=chat.id, first_name=chat.title or "Group", username=None
+        )
+        logger.info(f"📢 Bot added to group: {chat.title} ({chat.id})")
+
         if update.message:
             await update.message.reply_text(
-                "👋 Grazie per avermi aggiunto al gruppo!\n\n"
-                "Invierò automaticamente i menu delle mense Edisu ogni giorno.\n"
-                "Per interrompere il servizio, rimuovimi dal gruppo."
+                "👋 Ciao! Invierò qui i menu della mensa.\nUsa /start per configurare."
             )
-        
-        logger.info(f"📢 Bot aggiunto al gruppo: {chat.title or chat.id}")
 
 
-async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handler per messaggi privati - iscrive automaticamente l'utente"""
+async def handle_private_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handler for private messages - auto register"""
     chat = update.effective_chat
-    
-    if chat and chat.type == "private":
-        subscribers = load_subscribers()
-        
-        if chat.id not in subscribers:
-            subscribers.append(chat.id)
-            save_subscribers(subscribers)
-            
-            if update.message:
-                await update.message.reply_text(
-                    "👋 Ti ho iscritto automaticamente!\n\n"
-                    "Riceverai i menu ogni giorno alle 11:25 e 20:00.\n"
-                    "Usa /cancel per disiscriverti o /help per info."
-                )
-            
-            logger.info(f"📩 Utente privato iscritto: {chat.id}")
+    user = update.effective_user
+
+    if chat and chat.type == "private" and user:
+        async for session in get_session():
+            repo = UserRepository(session)
+            await repo.get_or_create(
+                telegram_id=chat.id, first_name=user.first_name, username=user.username
+            )
 
 
-async def scheduled_task(cl):
-    """Task eseguito dallo scheduler agli orari configurati"""
+async def scheduled_task():
+    """Task executed by scheduler"""
     try:
-        logger.info("⏰ Esecuzione schedulata avviata")
-        await download_and_send_stories(cl)
-        logger.info("✅ Esecuzione schedulata completata")
+        logger.info("⏰ Starting scheduled task...")
+
+        # 1. Fetch data from Instagram -> DB
+        await fetch_and_store_menus()
+
+        # 2. Send notifications from DB -> Telegram
+        notifier = NotificationService()
+        await notifier.send_daily_menu()
+
+        logger.info("✅ Scheduled task completed")
     except Exception as e:
-        logger.error(f"❌ Errore durante esecuzione schedulata: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-def signal_handler(signum, frame):
-    """Gestisce i segnali di interruzione (Ctrl+C, SIGTERM)"""
-    signal_name = signal.Signals(signum).name
-    logger.info(f"🛑 Ricevuto segnale {signal_name}, avvio shutdown...")
-    shutdown_event.set()
+        logger.error(f"❌ Error in scheduled task: {e}", exc_info=True)
 
 
 async def shutdown():
-    """Esegue la chiusura pulita di tutte le componenti"""
+    """Graceful shutdown helper"""
     global scheduler
-    
-    logger.info("🧹 Pulizia risorse in corso...")
-    
-    # Ferma lo scheduler
+    logger.info("🧹 Performing cleanup...")
+
     if scheduler:
-        logger.info("⏸️ Fermando scheduler...")
         scheduler.stop()
-        logger.info("✅ Scheduler fermato")
-    
-    logger.info("👋 Shutdown completato con successo")
+
+    await close_db()
+    logger.info("👋 Goodbye!")
 
 
 async def main():
-    """Entry point principale dell'applicazione"""
+    """Main Application Entry Point"""
     global scheduler, app
-    
-    logger.info("🚀 Avvio Bot Polito Mensa...")
-    
+
+    logger.info("🚀 Starting Polito Mensa Bot...")
+
     try:
-        # Login Instagram
-        logger.info("🔑 Login a Instagram in corso...")
-        try:
-            ig_service = InstagramService()
-            cl = ig_service.login()
-            logger.info("✅ Login Instagram completato")
-        except Exception as e:
-            logger.error(f"❌ Errore login Instagram: {e}")
-            import traceback
-            traceback.print_exc()
-            return
-        
-        # Esecuzione immediata al primo avvio
-        logger.info("📸 Esecuzione iniziale...")
-        try:
-            await download_and_send_stories(cl)
-            logger.info("✅ Esecuzione iniziale completata")
-        except Exception as e:
-            logger.error(f"❌ Errore esecuzione iniziale: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        # Setup scheduler
+        # 1. Initialize Database
+        await init_db()
+        await create_db_and_tables()
+
+        # 2. Setup Scheduler
         scheduler = BotScheduler()
-        scheduler.add_default_schedules(lambda: asyncio.create_task(scheduled_task(cl)))
+        # Schedule task for 11:25 and 20:00 (approx)
+        scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 11, 25)
+        scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 20, 0)
         scheduler.start()
-        
-        # Setup bot Telegram
+
+        # 3. Setup Telegram Bot
         if not TELEGRAM_TOKEN:
-            logger.error("❌ TELEGRAM_TOKEN non configurato")
-            return
-        
+            raise ValueError("TELEGRAM_TOKEN is not set in environment variables")
+
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-        
-        # Aggiungi handlers
+
+        # Register Handlers
         app.add_handler(CommandHandler("start", start_command))
+        app.add_handler(CommandHandler("menu", menu_command))
         app.add_handler(CommandHandler("cancel", cancel_command))
-        app.add_handler(CommandHandler("help", help_command))
-        app.add_handler(ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER))
-        app.add_handler(MessageHandler(filters.ChatType.PRIVATE, handle_private_message))
-        
-        logger.info("🤖 Bot Telegram in esecuzione... (Premi Ctrl+C per fermare)")
-        
-        # Avvia polling con gestione interruzione integrata
+        app.add_handler(
+            ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
+        )
+        app.add_handler(
+            MessageHandler(filters.ChatType.PRIVATE, handle_private_message)
+        )
+
+        # 4. Manual Start Lifecycle (Required for Async Main)
+        logger.info("🤖 Initializing Bot...")
+        await app.initialize()
+        await app.start()
+
+        if app.updater is None:
+            raise RuntimeError("Telegram Updater is None (polling not possible)")
+
+        logger.info("📡 Starting Polling...")
+        await app.updater.start_polling(drop_pending_updates=True)
+
+        # 5. Keep alive until signal
+        stop_signal = asyncio.Future()
+
+        def handle_signal():
+            if not stop_signal.done():
+                stop_signal.set_result(None)
+
+        loop = asyncio.get_running_loop()
+
+        # Cross-platform signal handling
+        if sys.platform != "win32":
+            loop.add_signal_handler(signal.SIGINT, handle_signal)
+            loop.add_signal_handler(signal.SIGTERM, handle_signal)
+        else:
+            logger.warning("⚠️ Windows detected: Use Ctrl+C or kill process to stop.")
+            # On Windows, we rely on the loop catching the KeyboardInterrupt in the run wrapper
+            # or we can simple wait.
+
         try:
-            app.run_polling(
-                allowed_updates=Update.ALL_TYPES,
-                stop_signals=[signal.SIGINT, signal.SIGTERM],
-                close_loop=False  # Non chiudere il loop automaticamente
-            )
-        except KeyboardInterrupt:
-            logger.info("⏹️ Interruzione da tastiera ricevuta")
-        
+            # Wait here forever until signal is set
+            await stop_signal
+        except asyncio.CancelledError:
+            pass
+
+        logger.info("🛑 Stopping Bot...")
+
+        # 6. Manual Stop Lifecycle
+        if app.updater.running:
+            await app.updater.stop()
+
+        if app.running:
+            await app.stop()
+            await app.shutdown()
+
     except Exception as e:
-        logger.error(f"❌ Errore fatale: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"❌ Fatal error: {e}", exc_info=True)
     finally:
-        # Esegui shutdown pulito
         await shutdown()
 
 
 if __name__ == "__main__":
     try:
         import nest_asyncio
+
         nest_asyncio.apply()
     except ImportError:
-        logger.warning("⚠️ nest_asyncio non installato - potrebbe causare problemi con Jupyter")
-    
-    asyncio.run(main())
+        pass
 
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass  # Handle Ctrl+C gracefully at the top level
