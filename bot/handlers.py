@@ -1,9 +1,11 @@
 """
 Handler per i comandi del bot Telegram
 """
+
 from telegram import Update
 from telegram.ext import ContextTypes
-from data.subscribers import add_subscriber, remove_subscriber
+
+from data.subscribers import add_subscriber_async, remove_subscriber_async
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -15,13 +17,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """
     if not update.effective_chat or not update.message:
         return
-    
+
     chat_id = update.effective_chat.id
     user = update.effective_user
-    
-    logger.info(f"📝 Comando /start da chat_id={chat_id} (utente: {user.username if user else 'unknown'})")
-    
-    if add_subscriber(chat_id):
+
+    logger.info(
+        f"📝 Comando /start da chat_id={chat_id} (utente: {user.username if user else 'unknown'})"
+    )
+
+    # Use async repository
+    if await add_subscriber_async(
+        chat_id, user.username if user and user.username else ""
+    ):
         await update.message.reply_text(
             "✅ Ti sei iscritto con successo!\n\n"
             "Riceverai i menu della mensa ogni giorno agli orari:\n"
@@ -43,13 +50,16 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """
     if not update.effective_chat or not update.message:
         return
-    
+
     chat_id = update.effective_chat.id
     user = update.effective_user
-    
-    logger.info(f"❌ Comando /cancel da chat_id={chat_id} (utente: {user.username if user else 'unknown'})")
-    
-    if remove_subscriber(chat_id):
+
+    logger.info(
+        f"❌ Comando /cancel da chat_id={chat_id} (utente: {user.username if user else 'unknown'})"
+    )
+
+    # Use async repository
+    if await remove_subscriber_async(chat_id):
         await update.message.reply_text(
             "👋 Ti sei disiscritto con successo.\n\n"
             "Non riceverai più aggiornamenti automatici.\n"
@@ -58,8 +68,7 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.info(f"❌ Iscritto rimosso: {chat_id}")
     else:
         await update.message.reply_text(
-            "ℹ️ Non sei iscritto.\n\n"
-            "Usa /start per iscriverti agli aggiornamenti."
+            "ℹ️ Non sei iscritto.\n\nUsa /start per iscriverti agli aggiornamenti."
         )
         logger.info(f"ℹ️ Utente non iscritto: {chat_id}")
 
@@ -70,7 +79,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """
     if not update.effective_chat or not update.message:
         return
-    
+
     help_text = (
         "🍽️ *Bot Menu Mensa Polito*\n\n"
         "*Comandi disponibili:*\n"
@@ -83,6 +92,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Il bot monitora le stories Instagram delle mense Edisu "
         "e invia automaticamente i menu tradotti in inglese."
     )
-    
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+
+    await update.message.reply_text(help_text, parse_mode="Markdown")
     logger.info(f"ℹ️ Comando /help da chat_id={update.effective_chat.id}")
