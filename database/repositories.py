@@ -139,7 +139,7 @@ class CanteenRepository(BaseRepository[Canteen]):
             List of active canteens
         """
         # Wrapped in col() to avoid 'bool' assignment errors
-        stmt = select(Canteen).where(col(Canteen.is_active) == True)
+        stmt = select(Canteen).where(col(Canteen.is_active) == True)  # noqa: E712
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -218,6 +218,7 @@ class MenuRepository(BaseRepository[Menu]):
             stmt = stmt.where(col(Menu.canteen_id) == canteen_id)
 
         # Used sqlalchemy.desc() function instead of .desc() method
+        # Also wrapped columns in col()
         stmt = stmt.order_by(desc(col(Menu.date)), Menu.meal_type)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
@@ -323,7 +324,7 @@ class UserRepository(BaseRepository[User]):
         Returns:
             List of active users
         """
-        stmt = select(User).where(col(User.is_active) == True)
+        stmt = select(User).where(col(User.is_active) == True)  # noqa: E712
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -340,7 +341,7 @@ class UserRepository(BaseRepository[User]):
         stmt = (
             select(User)
             .where(col(User.selected_canteen_id) == canteen_id)
-            .where(col(User.is_active) == True)
+            .where(col(User.is_active) == True)  # noqa: E712
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

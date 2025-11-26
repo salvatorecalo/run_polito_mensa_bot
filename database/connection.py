@@ -4,16 +4,22 @@ Database connection and session management with async support
 
 import logging
 import os
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlmodel import SQLModel
 
 logger = logging.getLogger(__name__)
 
 # Global engine and session maker
-engine = None
-async_session_maker = None
+# Type hints added to prevent "Variable is not defined" or "None" type errors
+engine: Optional[AsyncEngine] = None
+async_session_maker: Optional[async_sessionmaker[AsyncSession]] = None
 
 
 async def init_db(database_url: str | None = None) -> None:
@@ -26,7 +32,9 @@ async def init_db(database_url: str | None = None) -> None:
     global engine, async_session_maker
 
     if database_url is None:
-        database_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/bot.db")
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        db_path = os.path.join(base_dir, "data", "bot.db")
+        database_url = f"sqlite+aiosqlite:///{db_path}"
 
     logger.info(f"🗄️ Initializing database: {database_url}")
 
@@ -40,12 +48,12 @@ async def init_db(database_url: str | None = None) -> None:
     )
 
     # Create session maker
+    # Removed 'autocommit=False' as it is deprecated in SQLAlchemy 2.0 style
     async_session_maker = async_sessionmaker(
         engine,
         class_=AsyncSession,
         expire_on_commit=False,
         autoflush=False,
-        autocommit=False,
     )
 
     logger.info("✅ Database engine initialized")
@@ -62,7 +70,8 @@ async def create_db_and_tables() -> None:
         raise RuntimeError("Failed to initialize database engine")
 
     # Import models to register them with SQLModel
-    from database.models import Canteen, Menu, User
+    # noqa: F401 prevents linters from removing this unused import
+    from database.models import Canteen, Menu, User  # noqa: F401
 
     logger.info("📋 Creating database tables...")
     async with engine.begin() as conn:
@@ -88,17 +97,17 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     if async_session_maker is None:
         raise RuntimeError("Failed to initialize database session maker")
 
-    async with async_session_maker() as session:
-        try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+    session = async_session_maker()
+    try:
+        yield session
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
 
 
-def get_session_maker() -> async_sessionmaker:
+def get_session_maker() -> async_sessionmaker[AsyncSession]:
     """
     Get the session maker for manual session creation
 
