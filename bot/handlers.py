@@ -535,8 +535,9 @@ async def print_all_canteen(
     text = "🍽️ Tutte le mense disponibili:\n\n"
     
     for canteen in all_canteens:
-        text += f"📍 {canteen.name}\n"
-        text += f"   {canteen.location_description}\n"
+        canteen_name = canteen.name.replace("_", " ")
+        text += f"📍 {canteen_name}\n"
+        text += f"   {canteen.location_description.strip('"')}\n"
         text += f"   {'✅' if canteen.is_active else '❌'}\n\n"
     
     translated = await translate_text(text, language)
