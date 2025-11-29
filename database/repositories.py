@@ -519,3 +519,21 @@ class UserRepository(BaseRepository[User]):
         await self.session.commit()
         # Corrected indentation here
         return True
+    
+    async def update_user_language(self, telegram_id: int, new_language: str) -> bool:
+        """
+        Set user bot language
+
+        Args:
+            telegram_id: Telegram user ID
+            new_language: new language of the bot
+        
+        Returns:
+            True if updated, False if user not found
+        """
+        user = await self.get_by_telegram_id(telegram_id)
+        if not user:
+            return False
+        user.language = new_language
+        await self.session.commit()
+        return True
