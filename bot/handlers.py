@@ -8,7 +8,6 @@ from functools import wraps
 from typing import Any, Callable
 
 from telegram import Update
-from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from database.connection import get_session_maker
@@ -16,6 +15,7 @@ from database.repositories import CanteenRepository, MenuRepository, UserReposit
 from database.models import Canteen
 
 from config.settings import ADMIN_IDS
+from config.constants import LINGUE_SUPPORTATE
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -97,6 +97,7 @@ async def start_command(
                     "👋 Bentornato! Ti ho riattivato il servizio notifiche."
                 )
         else:
+            current_language = await get_current_language(update, context, session)
             if update.effective_message:
                 await update.effective_message.reply_text(
                     f"👋 Ciao {user.first_name}! Ti sei iscritto con successo.\n\n"
@@ -106,6 +107,7 @@ async def start_command(
                     "Usa /subscribe_canteen [NOME_MENSA] per ricevere i menù di quella mensa.\n"
                     "Usa /unsubscribe_canteen [NOME_MENSA] per smettere di ricevere i menù di quella mensa.\n"
                     "Puoi ricevere contemporaneamente il menù di più mense \n"
+                    f"Lingua impostata: {"🇮🇹" if current_language == "italiano" else "🇬🇧"}"
                 )
 
     except Exception as e:
@@ -410,7 +412,7 @@ async def add_mensa(
     """
         Funzione per un admin per aggiungere una nuova mensa (VA TROVATO UN NUOVO NOME)
     """
-    if not update.effective_user:
+    if not update.effective_user or not update.effective_message:
         return
     
     if session is None:
@@ -435,7 +437,7 @@ async def add_mensa(
                 "Hai digitato male il messaggio /add_mensa [NOME_MENSA] [INDIRIZZO]"
             )
         return
-    elif not context.args[1]:
+    if len(context.args) < 2:
         logger.error("Via mancante nel comando /add_mensa")
         if update.effective_message:
             await update.effective_message.reply_text(
@@ -444,9 +446,16 @@ async def add_mensa(
         return
     
     canteen_repository = CanteenRepository(session)
+    
+    all_canteen = await canteen_repository.get_all_active()
+    
     new_canteen = Canteen(
         name=context.args[0], location_description=context.args[1]
     )
+    
+    if new_canteen in all_canteen:
+        await update.effective_message.reply_text("Mensa già esistente")
+        return
     
     await canteen_repository.create(new_canteen)
     
@@ -578,7 +587,7 @@ async def print_subscribed_canteen(
         return
     
     if session is None:
-        logger.error("Session is None in the add_mensa command")
+        logger.error("Session is None in the print_subscribed_canteen command")
         return
     
     telegram_id = update.effective_user.id
@@ -618,3 +627,74 @@ async def print_subscribed_canteen(
         msg,
         parse_mode='HTML'
     )
+
+@inject_db
+async def set_language(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
+):
+    if not update.effective_user or not update.effective_message:
+        return None
+    
+    if session is None:
+        logger.error("Session is None in set_language command")
+        return
+        
+    telegram_id = update.effective_user.id
+    user_repo = UserRepository(session)
+    user = await user_repo.get_by_telegram_id(telegram_id)
+    
+    if user is None:
+        await update.effective_message.reply_text(
+            "Utente non trovato nel database"
+        )
+        return
+    
+    if context.args is None:
+        await update.effective_message.reply_text(
+            "Sintassi incorretta. Per impostare la lingua usa il comando /set_language [LINGUA]"
+        )
+        return
+    if len(context.args) < 1:
+        await update.effective_message.reply_text(
+            "Sintassi incorretta. Per impostare la lingua usa il comando /set_language [LINGUA]"
+        )
+        return
+    
+    if context.args[0].lower() not in LINGUE_SUPPORTATE:
+        msg =  "Lingua non supportata dall'attuale versione del bot.\nLe lingue supportate sono:\n"
+        for language in LINGUE_SUPPORTATE:
+            msg += f"- {language}\n"
+        await update.effective_message.reply_text(
+           msg
+        )
+        return
+    language = context.args[0]
+    success = await user_repo.update_user_language(telegram_id, language)
+    
+    if success:
+        await update.effective_message.reply_text(f"Lingua impostata correttamente a {language}")
+    else:
+        await update.effective_message.reply_text("Utente non trovato")
+
+
+async def get_current_language(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
+):
+    if not update.effective_user or not update.effective_message:
+        return None
+    
+    if session is None:
+        logger.error("Session is None in set_language command")
+        return
+        
+    telegram_id = update.effective_user.id
+    user_repo = UserRepository(session)
+    user = await user_repo.get_by_telegram_id(telegram_id)
+    
+    if user is None:
+        await update.effective_message.reply_text(
+            "Utente non trovato nel database"
+        )
+        return
+    return user.language
+    
