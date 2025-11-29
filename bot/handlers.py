@@ -7,6 +7,7 @@ from datetime import date, datetime
 from functools import wraps
 from typing import Any, Callable
 
+from googletrans import Translator, LANGUAGES
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -15,11 +16,12 @@ from database.repositories import CanteenRepository, MenuRepository, UserReposit
 from database.models import Canteen
 
 from config.settings import ADMIN_IDS
-from config.constants import LINGUE_SUPPORTATE
-from utils.my_translation import get_text
 
 # Setup logger
 logger = logging.getLogger(__name__)
+
+# Setup translator
+translator = Translator()
 
 
 # --- Dependency Injection Decorator ---
@@ -59,11 +61,32 @@ def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
 
 # --- Helper Functions ---
 
+async def translate_text(text: str, dest_language: str) -> str:
+    """
+    Translate text to destination language
+    
+    Args:
+        text: Text to translate (in Italian)
+        dest_language: Destination language code
+    
+    Returns:
+        Translated text
+    """
+    try:
+        if dest_language == "it":
+            return text
+        result = await translator.translate(text, dest=dest_language, src='it')
+        return result.text
+    except Exception as e:
+        logger.error(f"Translation error: {e}")
+        return text  # Fallback to original text
+
+
 async def get_user_language(session, telegram_id: int) -> str:
-    """Get user's language preference, default to italiano"""
+    """Get user's language preference, default to it"""
     user_repo = UserRepository(session)
     user = await user_repo.get_by_telegram_id(telegram_id)
-    return user.language if user else "italiano"
+    return user.language if user else "it"
 
 
 # --- Handlers ---
@@ -96,13 +119,21 @@ async def start_command(
 
         if not user.is_active:
             await repo.update_status(user.telegram_id, is_active=True)
-            await update.effective_message.reply_text(
-                get_text(language, "welcome_back")
-            )
+            text = "👋 Bentornato! Ti ho riattivato il servizio notifiche."
+            translated = await translate_text(text, language)
+            await update.effective_message.reply_text(translated)
         else:
-            await update.effective_message.reply_text(
-                get_text(language, "welcome_new", name=user.first_name)
+            text = (
+                f"👋 Ciao {user.first_name}! Ti sei iscritto con successo.\n\n"
+                "Riceverai i menu delle mense che configuri ogni giorno.\n"
+                "Usa /menu per vedere il menu di oggi.\n"
+                "Usa /cancel per disiscriverti.\n"
+                "Usa /subscribe_canteen [NOME_MENSA] per ricevere i menù di quella mensa.\n"
+                "Usa /unsubscribe_canteen [NOME_MENSA] per smettere di ricevere i menù di quella mensa.\n"
+                "Puoi ricevere contemporaneamente il menù di più mense."
             )
+            translated = await translate_text(text, language)
+            await update.effective_message.reply_text(translated)
 
     except Exception as e:
         raise e
@@ -130,42 +161,35 @@ async def menu_command(
     user = await user_repo.get_by_telegram_id(telegram_id)
 
     if not user:
-        await update.effective_message.reply_text(
-            get_text("italiano", "not_registered")
-        )
+        text = "⚠️ Non sei registrato. Usa /start prima."
+        translated = await translate_text(text, "it")
+        await update.effective_message.reply_text(translated)
         return
 
     language = user.language
     canteen_ids = user.selected_canteen_ids
 
     if not canteen_ids:
-        await update.effective_message.reply_text(
-            get_text(language, "no_canteens_subscribed"),
-            parse_mode='HTML'
-        )
+        text = "⚠️ Non sei iscritto a nessuna mensa.\nUsa /subscribe_canteen per iscriverti."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
         return
 
     today = date.today()
     current_hour = datetime.now().hour
-    meal_type = "lunch" if current_hour < 15 else "dinner"
-    meal_type_translated = get_text(language, meal_type)
+    meal_type = "pranzo" if current_hour < 15 else "cena"
 
     menus = await menu_repo.get_menus_by_date_for_canteens(
-        today, canteen_ids, meal_type
+        today, canteen_ids, "lunch" if current_hour < 15 else "dinner"
     )
 
     if not menus:
-        await update.effective_message.reply_text(
-            get_text(language, "no_menu_available", 
-                    date=today.strftime('%d/%m/%Y'), 
-                    meal_type=meal_type_translated),
-            parse_mode='HTML'
-        )
+        text = f"📅 Menu del {today.strftime('%d/%m/%Y')} ({meal_type})\n\n❌ Nessun menu disponibile per le tue mense.\nRiprova più tardi."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
         return
 
-    response_text = get_text(language, "menu_title", 
-                            date=today.strftime('%d/%m/%Y'), 
-                            meal_type=meal_type_translated)
+    response_text = f"🍽️ Menu del {today.strftime('%d/%m/%Y')} ({meal_type})\n\n"
     
     for menu in menus:
         canteen = await canteen_repo.get_by_id(menu.canteen_id)
@@ -175,10 +199,10 @@ async def menu_command(
         response_text += f"📍 <b>{canteen.name}</b>\n"
         response_text += f"   <i>{canteen.location_description}</i>\n\n"
         
-        # Use appropriate text based on language
-        if language == "english" and menu.translated_text:
+        # Use translated or original text based on language
+        if language != "it" and menu.translated_text:
             response_text += menu.translated_text + "\n\n"
-        elif language == "italiano" and menu.original_text:
+        elif menu.original_text:
             response_text += menu.original_text + "\n\n"
         else:
             courses = menu.courses_json
@@ -191,10 +215,9 @@ async def menu_command(
         
         response_text += "─" * 30 + "\n\n"
 
-    await update.effective_message.reply_text(
-        response_text,
-        parse_mode='HTML'
-    )
+    # Translate the entire menu text
+    translated = await translate_text(response_text, language)
+    await update.effective_message.reply_text(translated, parse_mode='HTML')
 
 
 @inject_db
@@ -216,13 +239,13 @@ async def cancel_command(
     success = await repo.update_status(telegram_id, is_active=False)
 
     if success:
-        await update.effective_message.reply_text(
-            get_text(language, "cancel_success")
-        )
+        text = "👋 Ti sei disiscritto correttamente.\nNon riceverai più notifiche automatiche."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
     else:
-        await update.effective_message.reply_text(
-            get_text(language, "not_subscribed_service")
-        )
+        text = "ℹ️ Non eri iscritto."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
 
 
 @inject_db
@@ -247,17 +270,17 @@ async def subscribe_canteen(
     user = await user_repo.get_by_telegram_id(telegram_id)
     
     if not user:
-        await update.effective_message.reply_text(
-            get_text("italiano", "not_registered")
-        )
+        text = "⚠️ Non sei registrato. Usa /start prima."
+        translated = await translate_text(text, "it")
+        await update.effective_message.reply_text(translated)
         return
     
     language = user.language
     
     if not context.args:
-        await update.effective_message.reply_text(
-            get_text(language, "specify_canteen_name")
-        )
+        text = "⚠️ Devi specificare il nome della mensa.\nEsempio: /subscribe_canteen Nome Mensa"
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
         return
     
     canteen_name = " ".join(context.args)
@@ -265,7 +288,9 @@ async def subscribe_canteen(
     
     if not canteen or canteen.id is None:
         all_canteens = await canteen_repo.get_all_active()
-        msg = get_text(language, "canteen_not_found", name=canteen_name) + "\n\n"
+        text = f"❌ Mensa '{canteen_name}' non trovata nel database.\n\nDevi inserire una di queste mense:"
+        translated = await translate_text(text, language)
+        msg = f"<b>{translated}</b>\n\n"
         
         for c in all_canteens:
             msg += f"📍 <b>{c.name}</b>\n   <i>{c.location_description}</i>\n\n"
@@ -279,21 +304,19 @@ async def subscribe_canteen(
     if success:
         user_canteen_ids = await user_repo.get_user_canteens(telegram_id)
         
-        msg = get_text(language, "subscribe_success", 
-                      name=canteen.name, 
-                      count=len(user_canteen_ids))
+        text = f"✅ Iscritto con successo alla mensa {canteen.name}!\n\n📋 Sei iscritto a {len(user_canteen_ids)} mensa/e:\n"
         
         for cid in user_canteen_ids:
             c = await canteen_repo.get_by_id(cid)
             if c:
-                msg += f"  • {c.name}\n"
+                text += f"  • {c.name}\n"
         
-        await update.effective_message.reply_text(msg, parse_mode='HTML')
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
     else:
-        await update.effective_message.reply_text(
-            get_text(language, "already_subscribed", name=canteen.name),
-            parse_mode='HTML'
-        )
+        text = f"ℹ️ Sei già iscritto alla mensa {canteen.name}."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
 
 
 @inject_db
@@ -318,17 +341,17 @@ async def unsubscribe_canteen(
     user = await user_repo.get_by_telegram_id(telegram_id)
     
     if not user:
-        await update.effective_message.reply_text(
-            get_text("italiano", "not_registered")
-        )
+        text = "⚠️ Non sei registrato. Usa /start prima."
+        translated = await translate_text(text, "it")
+        await update.effective_message.reply_text(translated)
         return
     
     language = user.language
     
     if not context.args:
-        await update.effective_message.reply_text(
-            get_text(language, "specify_canteen_name")
-        )
+        text = "⚠️ Devi specificare il nome della mensa.\nEsempio: /unsubscribe_canteen Nome Mensa"
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
         return
     
     canteen_name = " ".join(context.args)
@@ -336,7 +359,9 @@ async def unsubscribe_canteen(
     
     if not canteen or canteen.id is None:
         all_canteens = await canteen_repo.get_all_active()
-        msg = get_text(language, "canteen_not_found", name=canteen_name) + "\n\n"
+        text = f"❌ Mensa '{canteen_name}' non trovata nel database.\n\nDevi inserire una di queste mense:"
+        translated = await translate_text(text, language)
+        msg = f"<b>{translated}</b>\n\n"
         
         for c in all_canteens:
             msg += f"📍 <b>{c.name}</b>\n   <i>{c.location_description}</i>\n\n"
@@ -350,23 +375,23 @@ async def unsubscribe_canteen(
     if success:
         user_canteen_ids = await user_repo.get_user_canteens(telegram_id)
         
-        msg = get_text(language, "unsubscribe_success", name=canteen.name)
+        text = f"✅ Disiscritto correttamente da {canteen.name}.\n\n"
         
         if user_canteen_ids:
-            msg += get_text(language, "still_subscribed_to", count=len(user_canteen_ids))
+            text += f"📋 Sei ancora iscritto a {len(user_canteen_ids)} mensa/e:\n"
             for cid in user_canteen_ids:
                 c = await canteen_repo.get_by_id(cid)
                 if c:
-                    msg += f"  • {c.name}\n"
+                    text += f"  • {c.name}\n"
         else:
-            msg += get_text(language, "no_more_subscriptions")
+            text += "ℹ️ Non sei più iscritto a nessuna mensa."
         
-        await update.effective_message.reply_text(msg, parse_mode='HTML')
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
     else:
-        await update.effective_message.reply_text(
-            get_text(language, "not_subscribed", name=canteen.name),
-            parse_mode='HTML'
-        )
+        text = f"⚠️ Non eri iscritto alla mensa {canteen.name}."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
 
 
 # --- ADMIN COMMANDS ---
@@ -390,16 +415,16 @@ async def add_mensa(
     
     if telegram_id not in ADMIN_IDS:
         logger.error("Messaggio /add_mensa non inviato da un admin")
-        await update.effective_message.reply_text(
-            get_text(language, "no_permission")
-        )
+        text = "❌ Non hai i permessi per eseguire questo comando."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
         return
     
     if not context.args or len(context.args) < 2:
         logger.error("Argomenti mancanti nel comando /add_mensa")
-        await update.effective_message.reply_text(
-            get_text(language, "add_mensa_syntax")
-        )
+        text = "⚠️ Sintassi: /add_mensa [NOME_MENSA] [INDIRIZZO]"
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
         return
     
     canteen_repository = CanteenRepository(session)
@@ -409,21 +434,18 @@ async def add_mensa(
         location_description=" ".join(context.args[1:])
     )
     
-    # Check if already exists
     existing = await canteen_repository.get_by_name(new_canteen.name)
     if existing:
-        await update.effective_message.reply_text(
-            get_text(language, "canteen_already_exists")
-        )
+        text = "⚠️ Questa mensa esiste già nel database."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
         return
     
     await canteen_repository.create(new_canteen)
     
-    await update.effective_message.reply_text(
-        get_text(language, "canteen_added_success", 
-                name=new_canteen.name, 
-                location=new_canteen.location_description)
-    )
+    text = f"✅ Mensa {new_canteen.name} in {new_canteen.location_description} aggiunta correttamente!"
+    translated = await translate_text(text, language)
+    await update.effective_message.reply_text(translated, parse_mode='HTML')
 
 
 @inject_db
@@ -445,16 +467,16 @@ async def delete_mensa(
     
     if telegram_id not in ADMIN_IDS:
         logger.error("Messaggio /delete_mensa non inviato da un admin")
-        await update.effective_message.reply_text(
-            get_text(language, "no_permission")
-        )
+        text = "❌ Non hai i permessi per eseguire questo comando."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
         return
     
     if not context.args:
         logger.error("Argomenti mancanti nel comando /delete_mensa")
-        await update.effective_message.reply_text(
-            get_text(language, "delete_mensa_syntax")
-        )
+        text = "⚠️ Sintassi: /delete_mensa [NOME_MENSA]"
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
         return
     
     canteen_repo = CanteenRepository(session)   
@@ -463,7 +485,9 @@ async def delete_mensa(
     
     if not canteen or canteen.id is None:
         all_canteens = await canteen_repo.get_all_active()
-        msg = get_text(language, "canteen_not_found", name=canteen_name) + "\n\n"
+        text = f"❌ Mensa '{canteen_name}' non trovata nel database.\nDevi inserire una di queste mense:"
+        translated = await translate_text(text, language)
+        msg = f"{translated}\n\n"
         
         for c in all_canteens:
             msg += f"  • {c.name}\n"
@@ -474,13 +498,13 @@ async def delete_mensa(
     success = await canteen_repo.delete(canteen.id)
     
     if success:
-        await update.effective_message.reply_text(
-            get_text(language, "canteen_deleted_success", name=canteen.name)
-        )
+        text = f"✅ Mensa {canteen.name} eliminata correttamente."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
     else:
-        await update.effective_message.reply_text(
-            get_text(language, "canteen_delete_error")
-        )
+        text = "⚠️ Errore durante l'eliminazione della mensa."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
 
 
 @inject_db
@@ -503,19 +527,21 @@ async def print_all_canteen(
     all_canteens = await canteen_repo.get_all_active()
     
     if not all_canteens:
-        await update.effective_message.reply_text(
-            get_text(language, "no_canteens_in_db")
-        )
+        text = "⚠️ Nessuna mensa configurata nel database."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
         return
     
-    msg = get_text(language, "all_canteens_list") + "\n\n"
+    text = "🍽️ Tutte le mense disponibili:\n\n"
     
     for canteen in all_canteens:
-        msg += f"📍 <b>{canteen.name}</b>\n"
-        msg += f"   <i>{canteen.location_description}</i>\n"
-        msg += f"   {'✅' if canteen.is_active else '❌'}\n\n"
-        
-    await update.effective_message.reply_text(msg, parse_mode='HTML')
+        canteen_name = canteen.name.replace("_", " ")
+        text += f"📍 {canteen_name}\n"
+        text += f"   {canteen.location_description.strip('"')}\n"
+        text += f"   {'✅' if canteen.is_active else '❌'}\n\n"
+    
+    translated = await translate_text(text, language)
+    await update.effective_message.reply_text(translated, parse_mode='HTML')
 
 
 @inject_db
@@ -539,29 +565,30 @@ async def print_subscribed_canteen(
     user = await user_repo.get_by_telegram_id(telegram_id)
 
     if not user:
-        await update.effective_message.reply_text(
-            get_text("italiano", "not_registered")
-        )
+        text = "⚠️ Non sei registrato. Usa /start prima."
+        translated = await translate_text(text, "it")
+        await update.effective_message.reply_text(translated)
         return
     
     language = user.language
     
     if not user.selected_canteen_ids:
-        await update.effective_message.reply_text(
-            get_text(language, "no_canteens_subscribed")
-        )
+        text = "⚠️ Non sei iscritto a nessuna mensa.\nUsa /subscribe_canteen per iscriverti."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
         return
     
-    msg = get_text(language, "subscribed_canteens_list") + "\n\n"
+    text = "🍽️ Le tue mense:\n\n"
     
     for canteen_id in user.selected_canteen_ids:
         canteen = await canteen_repo.get_by_id(canteen_id)
         if canteen:
-            msg += f"📍 <b>{canteen.name}</b>\n"
-            msg += f"   <i>{canteen.location_description}</i>\n"
-            msg += f"   {'✅' if canteen.is_active else '❌'}\n\n"
-        
-    await update.effective_message.reply_text(msg, parse_mode='HTML')
+            text += f"📍 {canteen.name}\n"
+            text += f"   {canteen.location_description}\n"
+            text += f"   {'✅' if canteen.is_active else '❌'}\n\n"
+    
+    translated = await translate_text(text, language)
+    await update.effective_message.reply_text(translated, parse_mode='HTML')
 
 
 @inject_db
@@ -589,27 +616,26 @@ async def set_language(
     current_language = user.language
     
     if not context.args or len(context.args) < 1:
-        await update.effective_message.reply_text(
-            get_text(current_language, "set_language_syntax")
-        )
+        text = "⚠️ Sintassi: /set_language [CODICE_LINGUA]\nEsempio: /set_language en"
+        translated = await translate_text(text, current_language)
+        await update.effective_message.reply_text(translated)
         return
     
     language = context.args[0].lower()
     
-    if language not in LINGUE_SUPPORTATE:
-        msg = get_text(current_language, "language_not_supported")
-        for lang in LINGUE_SUPPORTATE:
-            msg += f"  • {lang}\n"
-        await update.effective_message.reply_text(msg)
+    # Validate language code (googletrans supports many codes)
+    
+    if language not in LANGUAGES:
+        text = f"❌ Lingua non supportata.\nLingue disponibili: {', '.join(LANGUAGES)}"
+        translated = await translate_text(text, current_language)
+        await update.effective_message.reply_text(translated)
         return
     
     success = await user_repo.update_user_language(telegram_id, language)
     
     if success:
-        await update.effective_message.reply_text(
-            get_text(language, "language_set")
-        )
+        text = f"✅ Lingua impostata correttamente a: {language}"
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
     else:
-        await update.effective_message.reply_text(
-            "Error / Errore"
-        )
+        await update.effective_message.reply_text("Error / Errore")
