@@ -127,7 +127,7 @@ class CanteenRepository(BaseRepository[Canteen]):
             Canteen or None
         """
         # Wrapped in col() to ensure Pylance treats it as a Column, not a str
-        stmt = select(Canteen).where(col(Canteen.name) == name)
+        stmt = select(Canteen).where(col(Canteen.name).ilike(name))
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -237,6 +237,28 @@ class MenuRepository(BaseRepository[Menu]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_menus_by_date_for_canteens(
+        self, target_date: date, canteen_ids: List[int], meal_type: str = "lunch"
+    ) -> List[Menu]:
+        """
+        Get menus for multiple canteens on a specific date
+
+        Args:
+            target_date: Date of the menu
+            canteen_ids: List of canteen IDs
+            meal_type: "lunch" or "dinner"
+
+        Returns:
+            List of menus
+        """
+        stmt = select(Menu).where(
+            col(Menu.date) == target_date,
+            col(Menu.canteen_id).in_(canteen_ids),
+            col(Menu.meal_type) == meal_type,
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_menus_by_date_range(
         self, start_date: date, end_date: date, canteen_id: Optional[int] = None
@@ -382,35 +404,102 @@ class UserRepository(BaseRepository[User]):
         """
         stmt = (
             select(User)
-            .where(col(User.selected_canteen_id) == canteen_id)
             .where(col(User.is_active) == True)  # noqa: E712
         )
         result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        users =  list(result.scalars().all())
+        return [user for user in users if canteen_id in user.selected_canteen_ids]
 
-    async def update_canteen_preference(
+    async def add_canteen_to_user(
         self, telegram_id: int, canteen_id: int
     ) -> bool:
         """
-        Update user's canteen preference
+        Add a canteen to user's subscriptions
 
         Args:
             telegram_id: Telegram user ID
-            canteen_id: New canteen ID
+            canteen_id: Canteen ID to add
 
         Returns:
-            Updated user or None if not found
+            True if added, False if user not found or already subscribed
         """
         user = await self.get_by_telegram_id(telegram_id)
         if not user:
             return False
 
-        user.selected_canteen_id = canteen_id
+        # Controlla se già iscritto
+        if canteen_id in user.selected_canteen_ids:
+            return False
+
+        user.selected_canteen_ids = user.selected_canteen_ids + [canteen_id]
         user.updated_at = datetime.now()
         await self.session.commit()
         await self.session.refresh(user)
         return True
 
+    async def remove_canteen_from_user(
+        self, telegram_id: int, canteen_id: int
+    ) -> bool:
+        """
+        Remove a canteen from user's subscriptions
+
+        Args:
+            telegram_id: Telegram user ID
+            canteen_id: Canteen ID to remove
+
+        Returns:
+            True if removed, False if user not found or not subscribed
+        """
+        user = await self.get_by_telegram_id(telegram_id)
+        if not user:
+            return False
+
+        # Controlla se è iscritto
+        if canteen_id not in user.selected_canteen_ids:
+            return False
+
+        user.selected_canteen_ids = [
+            cid for cid in user.selected_canteen_ids if cid != canteen_id
+        ]
+        user.updated_at = datetime.now()
+        await self.session.commit()
+        await self.session.refresh(user)
+        return True
+
+    async def is_user_subscribed_to_canteen(
+        self, telegram_id: int, canteen_id: int
+    ) -> bool:
+        """
+        Check if user is subscribed to a specific canteen
+
+        Args:
+            telegram_id: Telegram user ID
+            canteen_id: Canteen ID
+
+        Returns:
+            True if subscribed, False otherwise
+        """
+        user = await self.get_by_telegram_id(telegram_id)
+        if not user:
+            return False
+        return canteen_id in user.selected_canteen_ids
+
+    async def get_user_canteens(self, telegram_id: int) -> List[int]:
+        """
+        Get list of canteen IDs user is subscribed to
+
+        Args:
+            telegram_id: Telegram user ID
+
+        Returns:
+            List of canteen IDs
+        """
+        user = await self.get_by_telegram_id(telegram_id)
+        if not user:
+            return []
+        return user.selected_canteen_ids
+
+    
     async def update_status(self, telegram_id: int, is_active: bool) -> bool:
         """
         Activate or deactivate user

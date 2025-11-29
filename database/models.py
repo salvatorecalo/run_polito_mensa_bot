@@ -4,7 +4,7 @@ Database models using SQLModel (Pydantic + SQLAlchemy)
 
 from datetime import date as date_type
 from datetime import datetime, timezone
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Optional, List
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
@@ -86,7 +86,10 @@ class User(SQLModel, table=True):
     username: Optional[str] = Field(default=None, max_length=100)
 
     # User preferences
-    selected_canteen_id: Optional[int] = Field(default=None, foreign_key="canteens.id")
+    selected_canteen_ids: List[int] = Field(
+        default_factory=list,
+        sa_column=Column(JSON)
+    )
     is_active: bool = Field(default=True)
     language: str = Field(default="en", max_length=5)  # "en" or "it"
 

@@ -25,3 +25,5 @@ CREATED_IMAGES_DIR = "download/created_images"
 
 # Retry
 MAX_RETRIES = 3
+
+ADMIN_IDS = os.getenv('TELEGRAM_BOT_ADMINS')
