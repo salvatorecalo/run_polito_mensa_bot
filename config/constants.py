@@ -25,4 +25,4 @@ SCHEDULE_TIMES = [
     {"hour": 20, "minute": 0}     # Cena
 ]
 
-LINGUE_SUPPORTATE = ["italiano", "inglese"]
+LINGUE_SUPPORTATE = ["italiano", "english"]
