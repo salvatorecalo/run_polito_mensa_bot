@@ -26,3 +26,4 @@ SCHEDULE_TIMES = [
 ]
 
 LINGUE_SUPPORTATE = ["italiano", "english"]
+
