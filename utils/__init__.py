@@ -4,10 +4,14 @@ Utilities package
 from .logger import setup_logger
 from .file_operations import save_bytes_to_file, clean_directory
 from .image_processing import create_long_image
+from .convert_admin_ids import convert_admin_ids
+import utils.my_translation as my_translation 
 
 __all__ = [
     'setup_logger',
     'save_bytes_to_file',
     'clean_directory',
     'create_long_image',
+    "convert_admin_ids",
+    "my_translation"
 ]
