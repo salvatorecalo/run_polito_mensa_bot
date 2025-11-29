@@ -24,3 +24,5 @@ SCHEDULE_TIMES = [
     {"hour": 11, "minute": 25},  # Pranzo
     {"hour": 20, "minute": 0}     # Cena
 ]
+
+ADMIN_IDS = [238016214]

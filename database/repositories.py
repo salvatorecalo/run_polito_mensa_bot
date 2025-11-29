@@ -159,6 +159,48 @@ class CanteenRepository(BaseRepository[Canteen]):
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+    
+    
+    async def seed_default_canteens(self) -> List[Canteen]:
+        """
+        Create default test canteens if they don't exist
+
+        Returns:
+            List of created/existing canteens
+        """
+        default_canteens_data = [
+            {
+                "name": "Mensa Centrale",
+                "location_description": "Torino, Campus Luigi Einaudi",
+                "is_active": True
+            },
+            {
+                "name": "Mensa Palazzo Nuovo",
+                "location_description": "Torino, Via Sant'Ottavio 20",
+                "is_active": True
+            },
+            {
+                "name": "Mensa Biotecnologie",
+                "location_description": "Torino, Via Nizza 52",
+                "is_active": True
+            }
+        ]
+        
+        created_canteens = []
+        
+        for canteen_data in default_canteens_data:
+            # Check if already exists
+            existing = await self.get_by_name(canteen_data["name"])
+            
+            if not existing:
+                # Create new canteen
+                canteen = Canteen(**canteen_data)
+                created = await self.create(canteen)
+                created_canteens.append(created)
+            else:
+                created_canteens.append(existing)
+        
+        return created_canteens
 
 
 class MenuRepository(BaseRepository[Menu]):
@@ -348,7 +390,7 @@ class UserRepository(BaseRepository[User]):
 
     async def update_canteen_preference(
         self, telegram_id: int, canteen_id: int
-    ) -> Optional[User]:
+    ) -> bool:
         """
         Update user's canteen preference
 
@@ -361,13 +403,13 @@ class UserRepository(BaseRepository[User]):
         """
         user = await self.get_by_telegram_id(telegram_id)
         if not user:
-            return None
+            return False
 
         user.selected_canteen_id = canteen_id
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now()
         await self.session.commit()
         await self.session.refresh(user)
-        return user
+        return True
 
     async def update_status(self, telegram_id: int, is_active: bool) -> bool:
         """

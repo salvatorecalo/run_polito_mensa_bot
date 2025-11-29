@@ -13,6 +13,9 @@ from telegram.ext import ContextTypes
 
 from database.connection import get_session
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
+from database.models import Canteen
+
+from config.constants import ADMIN_IDS
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -92,9 +95,12 @@ async def start_command(
             if update.effective_message:
                 await update.effective_message.reply_text(
                     f"👋 Ciao {user.first_name}! Ti sei iscritto con successo.\n\n"
-                    "Riceverai i menu della mensa ogni giorno.\n"
+                    "Riceverai i menu delle mense che configuri ogni giorno.\n"
                     "Usa /menu per vedere il menu di oggi.\n"
-                    "Usa /cancel per disiscriverti."
+                    "Usa /cancel per disiscriverti.\n"
+                    "Usa /subscribe_canteen [NOME_MENSA] per ricevere i menù di quella mensa.\n"
+                    "Usa /unsubscribe_canteen [NOME_MENSA] per smettere di ricevere i menù di quella mensa.\n"
+                    "Puoi ricevere contemporaneamente il menù di più mense \n"
                 )
 
     except Exception as e:
@@ -234,3 +240,220 @@ async def cancel_command(
     else:
         if update.effective_message:
             await update.effective_message.reply_text("ℹ️ Non eri iscritto.")
+
+@inject_db
+async def subscribe_canteen(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
+):
+    """
+        This methods subscribe a specific user to a canteen
+    """
+    
+    if not update.effective_user:
+        return
+
+    if session is None:
+        logger.error("Session is None in add_canteen command")
+        return
+    
+    telegram_id = update.effective_user.id
+    logger.info(f"🍽️ /add_canteen command received from {telegram_id}")
+
+    user_repo = UserRepository(session)
+    canteen_repo = CanteenRepository(session)
+    
+    user = await user_repo.get_by_telegram_id(telegram_id)
+    
+    if not user:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ Non sei registrato. Usa /start prima."
+            )
+        return
+    
+    # Context.args contiene i dati del messaggio dell'utente
+    if not context.args:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ Devi specificare il nome della mensa.\n"
+                "Esempio: /add_canteen Nome Mensa"
+            )
+        return
+    
+    # The user write correctly the command 
+    canteen_name = " ".join(context.args) if context.args else ""
+    
+    canteen = await canteen_repo.get_by_name(canteen_name)
+    all_canteens = await canteen_repo.get_all_active()
+    if not canteen:
+        if update.effective_message:
+            msg = await update.effective_message.reply_text(
+                 f"❌ Mensa '{canteen_name}' non trovata nel database.\nDevi inserire una di queste mense:"
+            )
+            # we need to store previous message text in order to add new content
+            # otherwise edit_text will reset the message
+            text = msg.text
+            for canteen in all_canteens:
+                text += f"\n{canteen.name}\n"
+            await msg.edit_text(f"{text}")
+        return 
+    
+    if canteen.id is None:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ Errore: la mensa non ha un ID valido."
+            )
+        return
+    
+    canteen_id: int = canteen.id
+    
+    if user.id in [u.id for u in await user_repo.get_users_by_canteen(canteen_id)]:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                f"Sei già iscritto in {canteen.name}\n Per disicriverti usa /unsubscribe_canteen"
+            )
+        return
+    
+    success = await user_repo.update_canteen_preference(telegram_id, canteen.id)
+    
+    if success:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                f"✅ Mensa '{canteen_name}' aggiunta con successo!\n"
+                "Riceverai i menu di questa mensa."
+            )
+    else:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ Errore nell'aggiunta della mensa. Riprova più tardi."
+            )
+
+@inject_db
+async def add_mensa(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
+):
+    
+    """
+        Funzione per un admin per aggiungere una nuova mensa (VA TROVATO UN NUOVO NOME)
+    """
+    if not update.effective_user:
+        return
+    
+    if session is None:
+        logger.error("Session is None in the add_mensa command")
+        return
+    
+    telegram_id = update.effective_user.id
+    logger.info(f"🍽️ /add_mensa command received from {telegram_id}")
+    
+    if telegram_id not in ADMIN_IDS:
+        logger.error("Messaggio /add_mensa non inviato da un admin")
+        if update.effective_message:
+            update.effective_message.reply_text(
+                "Non hai i permessi per eseguire questo comando."
+            )
+        return
+    
+    if not context.args:
+        logger.error("Argomenti mancanti nel comando /add_mensa")
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "Hai digitato male il messaggio /add_mensa [NOME_MENSA] [INDIRIZZO]"
+            )
+        return
+    elif not context.args[1]:
+        logger.error("Via mancante nel comando /add_mensa")
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "Hai digitato male il messaggio /add_mensa [NOME_MENSA] [INDIRIZZO]"
+            )
+        return
+    
+    canteen_repository = CanteenRepository(session)
+    new_canteen = Canteen(
+        name=context.args[0], location_description=context.args[1]
+    )
+    
+    await canteen_repository.create(new_canteen)
+    
+    if update.effective_message:
+        await update.effective_message.reply_text(
+            f"Mensa {context.args[0]} situata in {context.args[1]} aggiunta correttamente"
+        )
+
+
+@inject_db
+async def delete_mensa(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
+):
+    
+    """
+        Funzione per un admin per aggiungere una nuova mensa (VA TROVATO UN NUOVO NOME)
+    """
+    if not update.effective_user:
+        return
+    
+    if session is None:
+        logger.error("Session is None in the add_mensa command")
+        return
+    
+    telegram_id = update.effective_user.id
+    logger.info(f"🍽️ /delete_mensa command received from {telegram_id}")
+    
+    if telegram_id not in ADMIN_IDS:
+        logger.error("Messaggio /delete_mensa non inviato da un admin")
+        if update.effective_message:
+            update.effective_message.reply_text(
+                "Non hai i permessi per eseguire questo comando."
+            )
+        return
+    
+    if not context.args:
+        logger.error("Argomenti mancanti nel comando /delete_mensa")
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "Hai digitato male il messaggio /delete_mensa [NOME_MENSA]"
+            )
+        return
+    
+    canteen_repo = CanteenRepository(session)   
+    canteen_name = context.args[0]
+    canteen = await canteen_repo.get_by_name(canteen_name)
+    all_canteens = await canteen_repo.get_all_active()
+    
+    if not canteen:
+        if update.effective_message:
+            msg = await update.effective_message.reply_text(
+                 f"❌ Mensa '{canteen_name}' non trovata nel database.\nDevi inserire una di queste mense:"
+            )
+            # we need to store previous message text in order to add new content
+            # otherwise edit_text will reset the message
+            text = msg.text
+            for canteen in all_canteens:
+                text += f"\n{canteen.name}\n"
+            await msg.edit_text(f"{text}")
+        return 
+    
+    if canteen.id is None:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ Errore: la mensa non ha un ID valido."
+            )
+        return
+
+    success = await canteen_repo.delete(canteen.id)
+    
+    if success:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ Mensa cancellata correttamente."
+            )
+    else:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "⚠️ Si è verificato un problema durante la cancellazione della mensa"
+            )
+
+            
+    
+    

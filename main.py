@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 
-from bot.handlers import cancel_command, menu_command, start_command
+from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_mensa, delete_mensa
 from bot.scheduler import BotScheduler
 from config import TELEGRAM_TOKEN
 from database.connection import close_db, create_db_and_tables, get_session, init_db
@@ -127,6 +127,10 @@ async def main():
         app.add_handler(CommandHandler("start", start_command))
         app.add_handler(CommandHandler("menu", menu_command))
         app.add_handler(CommandHandler("cancel", cancel_command))
+        app.add_handler(CommandHandler("subscribe_canteen", subscribe_canteen))
+        app.add_handler(CommandHandler("add_mensa", add_mensa))
+        app.add_handler(CommandHandler("delete_mensa", delete_mensa))
+        
         app.add_handler(
             ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
         )
@@ -138,6 +142,7 @@ async def main():
         logger.info("🤖 Initializing Bot...")
         await app.initialize()
         await app.start()
+
 
         if app.updater is None:
             raise RuntimeError("Telegram Updater is None (polling not possible)")
