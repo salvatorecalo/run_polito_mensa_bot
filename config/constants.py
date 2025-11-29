@@ -25,4 +25,3 @@ SCHEDULE_TIMES = [
     {"hour": 20, "minute": 0}     # Cena
 ]
 
-ADMIN_IDS = [238016214]

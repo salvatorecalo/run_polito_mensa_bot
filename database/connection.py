@@ -110,7 +110,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 def get_session_maker() -> async_sessionmaker[AsyncSession]:
     """
     Get the session maker for manual session creation
-
+ 
     Returns:
         async_sessionmaker instance
     """
