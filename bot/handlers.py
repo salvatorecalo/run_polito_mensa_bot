@@ -61,34 +61,48 @@ def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
 
 # --- Helper Functions ---
 
+import re
+
 async def translate_text(text: str, dest_language: str) -> str:
     """
-    Translate text to destination language
+    Translate text to destination language, preserving commands
     
     Args:
         text: Text to translate (in Italian)
         dest_language: Destination language code
     
     Returns:
-        Translated text
+        Translated text with commands preserved
     """
     try:
         if dest_language == "it":
             return text
-        result = await translator.translate(text, dest=dest_language, src='it')
-        return result.text
+        
+        # 1. Trova tutti i comandi (pattern: /comando)
+        command_pattern = r'(/[a-zA-Z_]+)'
+        commands = re.findall(command_pattern, text)
+        
+        # 2. Sostituisci i comandi con placeholder
+        text_with_placeholders = text
+        placeholders = {}
+        for i, command in enumerate(commands):
+            placeholder = f"__CMD{i}__"
+            placeholders[placeholder] = command
+            text_with_placeholders = text_with_placeholders.replace(command, placeholder, 1)
+        
+        # 3. Traduci il testo con i placeholder
+        result = await translator.translate(text_with_placeholders, dest=dest_language, src='it')
+        translated_text = result.text
+        
+        # 4. Ripristina i comandi originali
+        for placeholder, command in placeholders.items():
+            translated_text = translated_text.replace(placeholder, command)
+        
+        return translated_text
+        
     except Exception as e:
         logger.error(f"Translation error: {e}")
         return text  # Fallback to original text
-
-
-async def get_user_language(session, telegram_id: int) -> str:
-    """Get user's language preference, default to it"""
-    user_repo = UserRepository(session)
-    user = await user_repo.get_by_telegram_id(telegram_id)
-    return user.language if user else "it"
-
-
 # --- Handlers ---
 
 
@@ -538,10 +552,11 @@ async def print_all_canteen(
         canteen_name = canteen.name.replace("_", " ")
         text += f"📍 {canteen_name}\n"
         text += f"   {canteen.location_description.strip('"')}\n"
-        text += f"   {'✅' if canteen.is_active else '❌'}\n\n"
+        translated_is_active_text = await translate_text(f"   Attiva? {'✅' if canteen.is_active else '❌'}", language)
+        text += translated_is_active_text
+        text += "\n\n"
     
-    translated = await translate_text(text, language)
-    await update.effective_message.reply_text(translated, parse_mode='HTML')
+    await update.effective_message.reply_text(text, parse_mode='HTML')
 
 
 @inject_db
@@ -583,12 +598,15 @@ async def print_subscribed_canteen(
     for canteen_id in user.selected_canteen_ids:
         canteen = await canteen_repo.get_by_id(canteen_id)
         if canteen:
-            text += f"📍 {canteen.name}\n"
-            text += f"   {canteen.location_description}\n"
-            text += f"   {'✅' if canteen.is_active else '❌'}\n\n"
+            canteen_name = canteen.name.replace("_", " ")
+            text += f"📍 {canteen_name}\n"
+            text += f"   {canteen.location_description.strip('"')}\n"
+            translated_is_active_text = await translate_text(f"   Attiva? {'✅' if canteen.is_active else '❌'}", language)
+            text += translated_is_active_text
+            text += "\n\n"
     
-    translated = await translate_text(text, language)
-    await update.effective_message.reply_text(translated, parse_mode='HTML')
+        
+    await update.effective_message.reply_text(text, parse_mode='HTML')
 
 
 @inject_db
@@ -622,9 +640,7 @@ async def set_language(
         return
     
     language = context.args[0].lower()
-    
-    # Validate language code (googletrans supports many codes)
-    
+        
     if language not in LANGUAGES:
         text = f"❌ Lingua non supportata.\nLingue disponibili: {', '.join(LANGUAGES)}"
         translated = await translate_text(text, current_language)
