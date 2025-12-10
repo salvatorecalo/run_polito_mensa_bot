@@ -11,7 +11,7 @@ from instagrapi.exceptions import (
     TwoFactorRequired,
 )
 
-from services.instagram_service import InstagramService
+# from services.instagram_service import InstagramService
 
 
 @pytest.fixture
@@ -27,11 +27,11 @@ def mock_client_instance(mock_client_class):
     return mock_client_class.return_value
 
 
-@pytest.fixture
-def instagram_service(mock_client_class):
-    """Crea un'istanza di InstagramService con client mockato"""
-    # La patch è attiva qui grazie alla fixture mock_client_class
-    return InstagramService()
+# @pytest.fixture
+# def instagram_service(mock_client_class):
+#     """Crea un'istanza di InstagramService con client mockato"""
+#     # La patch è attiva qui grazie alla fixture mock_client_class
+#     return InstagramService()
 
 
 class TestInstagramServiceInit:
