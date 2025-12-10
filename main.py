@@ -3,10 +3,10 @@ Main entry point for the Polito Mensa Bot
 """
 
 import asyncio
-import logging
 import signal
 import sys
 
+from config.settings import TARGET_USER
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -75,7 +75,7 @@ async def scheduled_task():
     try:
         logger.info("⏰ Starting scheduled task...")
 
-        # 1. Fetch data from Instagram -> DB
+        # 1. Fetch data from InstagramNavigator -> DB
         await fetch_and_store_menus()
 
         # 2. Send notifications from DB -> Telegram
@@ -113,7 +113,7 @@ async def main():
         # 2. Setup Scheduler
         scheduler = BotScheduler()
         # Schedule task for 11:25 and 20:00 (approx)
-        scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 11, 25)
+        scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 15, 47)
         scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 20, 0)
         scheduler.start()
 
@@ -154,8 +154,7 @@ async def main():
 
         logger.info("📡 Starting Polling...")
         await app.updater.start_polling(drop_pending_updates=True)
-
-        # 5. Keep alive until signal
+               
         stop_signal = asyncio.Future()
 
         def handle_signal():
