@@ -11,7 +11,7 @@ import cv2
 import pytesseract
 import requests
 from googletrans import Translator
-
+import shutil
 from config import DOWNLOAD_DIR
 from database.connection import create_db_and_tables, get_session, init_db
 from database.models import Canteen, Menu
@@ -45,38 +45,38 @@ async def fetch_and_store_menus() -> None:
             return 
         
         for i, url in enumerate(urls, 1):
-            logger.debug(f"  [{i}] {url[:80]}...")
+            logger.debug(f"  [{i}] {url}...")
+        
+        async for session in get_session():
+            canteen_repo = CanteenRepository(session)
+            menu_repo = MenuRepository(session)
+
+            # Load all active canteens for OCR matching
+            all_canteens = await canteen_repo.get_all_active()
             
+            if not all_canteens:
+                logger.error("❌ No canteens configured in DB. Cannot associate menus.")
+                logger.info("💡 Creating default canteens...")
+                all_canteens = await canteen_repo.seed_default_canteens()
+                logger.info(f"✅ Created {len(all_canteens)} default canteens")
+            
+            logger.info(f"📋 Processing {len(urls)} images against {len(all_canteens)} canteens...")
+            success_count = 0
+            
+            shutil.rmtree(DOWNLOAD_DIR)
+            for i, url in enumerate(urls, 1):
+                logger.info(f"Processing image {i}/{len(urls)}")
+                result = await process_image_url(url, all_canteens, menu_repo, canteen_repo)
+                if result:
+                    success_count += 1
+            
+            logger.info(f"✅ Successfully processed {success_count}/{len(urls)} images")
+                
+        logger.info("✅ Scraper Service completed.")
+
     except Exception as e:
         logger.error(f"❌ Failed to fetch stories from web mirror: {e}", exc_info=True)
         return
-
-    # 3. Process and Store
-    async for session in get_session():
-        canteen_repo = CanteenRepository(session)
-        menu_repo = MenuRepository(session)
-
-        # Load all active canteens for OCR matching
-        all_canteens = await canteen_repo.get_all_active()
-        
-        if not all_canteens:
-            logger.error("❌ No canteens configured in DB. Cannot associate menus.")
-            logger.info("💡 Creating default canteens...")
-            all_canteens = await canteen_repo.seed_default_canteens()
-            logger.info(f"✅ Created {len(all_canteens)} default canteens")
-        
-        logger.info(f"📋 Processing {len(urls)} images against {len(all_canteens)} canteens...")
-        success_count = 0
-        
-        for i, url in enumerate(urls, 1):
-            logger.info(f"Processing image {i}/{len(urls)}")
-            result = await process_image_url(url, all_canteens, menu_repo, canteen_repo)
-            if result:
-                success_count += 1
-        
-        logger.info(f"✅ Successfully processed {success_count}/{len(urls)} images")
-            
-    logger.info("✅ Scraper Service completed.")
 
 
 async def process_image_url(
@@ -143,15 +143,16 @@ async def process_image_url(
         translated_texts = {}
         try:
             # Translate to English
-            result_en = await asyncio.to_thread(
-                translator.translate, text, dest='en', src='it'
-            )
+            result_en = await translator.translate(text, dest='en', src='it')
             translated_texts['en'] = result_en.text
             
             logger.info(f"🌐 Text translated to English")
         except Exception as e:
             logger.warning(f"⚠️ Translation failed: {e}")
             translated_texts = {}
+        
+        if matched_canteen.id is None:
+            return False
         
         # 5. Check if menu already exists
         existing_menu = await menu_repo.get_menu_by_date(
@@ -193,7 +194,7 @@ async def process_image_url(
         return True
 
     except Exception as e:
-        logger.error(f"❌ Error processing URL {url[:80]}...: {e}", exc_info=True)
+        logger.error(f"❌ Error processing URL {url}...: {e}", exc_info=True)
         return False
 
 
