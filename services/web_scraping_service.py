@@ -1,8 +1,8 @@
-import logging
+from utils.logger import setup_logger
 import asyncio
 from playwright.async_api import async_playwright
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 class WebScrapingService:
     """
@@ -28,25 +28,24 @@ class WebScrapingService:
                 logger.info(f"Navigazione verso {target_url}...")
                 await page.goto(target_url, wait_until='domcontentloaded', timeout=60000)
                 
+                try:
+                    await page.wait_for_selector(".profile-stories-item img", timeout=10000)
+                except:
+                    logger.warning("⚠️ Timeout aspettando le storie, continuo comunque...")
                 # Aspetta che appaiano gli elementi delle storie (o i tab)
                 # Nota: I selettori (.story-item, img) cambiano da sito a sito.
                 # Qui cerchiamo immagini che potrebbero essere storie.
-                    
+                
                 # A volte bisogna cliccare un tab "Stories". 
                 # Instanavigation di solito le carica di default o dopo lo scroll.
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 await asyncio.sleep(3) # Aspetta rendering Javascript
                 
                 # Sul loro sito hanno un div con la classe profile-stories-item che wrappa le img interessate
-                media_elements = await page.query_selector_all("img")
+                media_elements = await page.locator(".profile-stories-item > img").all()
                 for elm in media_elements:
                     src = await elm.get_attribute("src")
-                    
-                    if src and ("instagram" in src.lower() or "cdn" in src.lower() or "scontent" in src.lower()):
-                        if "150x150" not in src and "440x440" not in src:
-                                # Verifica che non sia già in lista
-                                if src not in stories_urls:
-                                    stories_urls.append(src)
+                    stories_urls.append(src)
                 logger.info(f"✅ Trovati {len(stories_urls)} potenziali URL storie.")
             except Exception as e:
                 logger.error(f"Errore durante lo scraping: {e}")

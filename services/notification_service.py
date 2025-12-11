@@ -2,16 +2,15 @@
 Notification Service: Sends menus from Database to Telegram Subscribers
 """
 
-import logging
 from datetime import date, datetime
-
+from utils.logger import setup_logger
 # Ensure correct imports based on previous files
 from database.connection import get_session
 from database.models import Menu
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from services.telegram_service import TelegramService
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class NotificationService:
