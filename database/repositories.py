@@ -5,15 +5,16 @@ Provides clean abstraction between business logic and database
 
 from datetime import date, datetime
 from typing import Generic, List, Optional, Type, TypeVar
-
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel, col
-
+from utils.logger import setup_logger
 from database.models import Canteen, Menu, User
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 ModelType = TypeVar("ModelType", bound=SQLModel)
 
+logger = setup_logger(__name__)
 
 class BaseRepository(Generic[ModelType]):
     """
@@ -65,10 +66,22 @@ class BaseRepository(Generic[ModelType]):
         Returns:
             Created entity with ID
         """
-        self.session.add(obj)
-        await self.session.commit()
-        await self.session.refresh(obj)
-        return obj
+        try:
+            self.session.add(obj)
+            await self.session.commit()
+            await self.session.refresh(obj)
+            return obj
+        except IntegrityError as e:
+            await self.session.rollback()
+            logger.error(f"❌ Integrity error creating {self.model.__name__}: {e}")
+        except SQLAlchemyError as e:
+            await self.session.rollback()
+            logger.error(f"❌ Database error creating {self.model.__name__}: {e}")
+            raise
+        except Exception as e:
+            await self.session.rollback()
+            logger.error(f"❌ Unexpected error creating {self.model.__name__}: {e}")
+            raise
 
     async def update(self, obj: ModelType) -> ModelType:
         """
