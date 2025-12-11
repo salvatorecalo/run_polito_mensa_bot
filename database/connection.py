@@ -2,7 +2,7 @@
 Database connection and session management with async support
 """
 
-import logging
+from utils.logger import setup_logger
 import os
 from typing import AsyncGenerator, Optional
 
@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlmodel import SQLModel
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 # Global engine and session maker
 # Type hints added to prevent "Variable is not defined" or "None" type errors

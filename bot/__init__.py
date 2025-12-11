@@ -12,7 +12,8 @@ from .handlers import \
         print_all_canteen, \
         unsubscribe_canteen, \
         print_subscribed_canteen, \
-        set_language
+        set_language, \
+        refresh_menu
 from .scheduler import BotScheduler
 
 __all__ = [
@@ -26,5 +27,6 @@ __all__ = [
     "delete_mensa",
     "print_all_canteen",
     "print_subscribed_canteen",
-    "set_language"
+    "set_language",
+    "refresh_menu"
 ]

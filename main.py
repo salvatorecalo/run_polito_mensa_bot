@@ -3,10 +3,10 @@ Main entry point for the Polito Mensa Bot
 """
 
 import asyncio
-import logging
 import signal
 import sys
 
+from config.settings import TARGET_USER
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 
-from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_mensa, delete_mensa, print_all_canteen, unsubscribe_canteen, print_subscribed_canteen, set_language
+from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_mensa, delete_mensa, print_all_canteen, unsubscribe_canteen, print_subscribed_canteen, set_language, refresh_menu
 from bot.scheduler import BotScheduler
 from config import TELEGRAM_TOKEN
 from database.connection import close_db, create_db_and_tables, get_session, init_db
@@ -75,7 +75,7 @@ async def scheduled_task():
     try:
         logger.info("⏰ Starting scheduled task...")
 
-        # 1. Fetch data from Instagram -> DB
+        # 1. Fetch data from InstagramNavigator -> DB
         await fetch_and_store_menus()
 
         # 2. Send notifications from DB -> Telegram
@@ -113,7 +113,7 @@ async def main():
         # 2. Setup Scheduler
         scheduler = BotScheduler()
         # Schedule task for 11:25 and 20:00 (approx)
-        scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 11, 25)
+        scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 11, 45)
         scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 20, 0)
         scheduler.start()
 
@@ -134,7 +134,7 @@ async def main():
         app.add_handler(CommandHandler("print_all_canteen", print_all_canteen))
         app.add_handler(CommandHandler("print_subscribed_canteen", print_subscribed_canteen))
         app.add_handler(CommandHandler("set_language", set_language))
-
+        app.add_handler(CommandHandler("refresh_menu", refresh_menu))
         
         app.add_handler(
             ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
@@ -154,8 +154,7 @@ async def main():
 
         logger.info("📡 Starting Polling...")
         await app.updater.start_polling(drop_pending_updates=True)
-
-        # 5. Keep alive until signal
+               
         stop_signal = asyncio.Future()
 
         def handle_signal():

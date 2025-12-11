@@ -2,7 +2,7 @@
 Telegram Bot Handlers with Dependency Injection and Async Database Support
 """
 
-import logging
+from utils.logger import setup_logger
 from datetime import date, datetime
 from functools import wraps
 from typing import Any, Callable
@@ -18,7 +18,7 @@ from database.models import Canteen
 from config.settings import ADMIN_IDS
 
 # Setup logger
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 # Setup translator
 translator = Translator()
@@ -61,34 +61,73 @@ def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
 
 # --- Helper Functions ---
 
+import re
+
+# --- Helper Functions ---
+
+import re
+
 async def translate_text(text: str, dest_language: str) -> str:
     """
-    Translate text to destination language
+    Translate text to destination language, preserving commands
     
     Args:
         text: Text to translate (in Italian)
         dest_language: Destination language code
     
     Returns:
-        Translated text
+        Translated text with commands preserved
     """
     try:
         if dest_language == "it":
             return text
-        result = await translator.translate(text, dest=dest_language, src='it')
-        return result.text
+        
+        # 1. Trova tutti i comandi (pattern: /comando)
+        command_pattern = r'(/[a-zA-Z_]+)'
+        commands = re.findall(command_pattern, text)
+        
+        # 2. Sostituisci i comandi con placeholder
+        text_with_placeholders = text
+        placeholders = {}
+        for i, command in enumerate(commands):
+            placeholder = f"__CMD{i}__"
+            placeholders[placeholder] = command
+            text_with_placeholders = text_with_placeholders.replace(command, placeholder, 1)
+        
+        # 3. Traduci il testo con i placeholder
+        result = await translator.translate(text_with_placeholders, dest=dest_language, src='it')
+        translated_text = result.text
+        
+        # 4. Ripristina i comandi originali
+        for placeholder, command in placeholders.items():
+            translated_text = translated_text.replace(placeholder, command)
+        
+        return translated_text
+        
     except Exception as e:
         logger.error(f"Translation error: {e}")
         return text  # Fallback to original text
 
 
 async def get_user_language(session, telegram_id: int) -> str:
-    """Get user's language preference, default to it"""
-    user_repo = UserRepository(session)
-    user = await user_repo.get_by_telegram_id(telegram_id)
-    return user.language if user else "it"
-
-
+    """
+    Get user's language preference, default to it
+    
+    Args:
+        session: Database session
+        telegram_id: Telegram user ID
+    
+    Returns:
+        Language code (e.g., 'it', 'en')
+    """
+    try:
+        user_repo = UserRepository(session)
+        user = await user_repo.get_by_telegram_id(telegram_id)
+        return user.language if user else "en"
+    except Exception as e:
+        logger.error(f"Error getting user language: {e}")
+        return "en"  # Default fallback
+    
 # --- Handlers ---
 
 
@@ -138,12 +177,68 @@ async def start_command(
     except Exception as e:
         raise e
 
+"""
+Add this handler to your handlers.py file
+"""
 
+@inject_db
+async def refresh_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
+):
+    """
+    Force refresh menus from Instagram mirror (Admin only)
+    """
+    if not update.effective_user or not update.effective_message:
+        return
+    
+    if session is None:
+        logger.error("Session is None in refresh_menu command")
+        return
+    
+    telegram_id = update.effective_user.id
+    logger.info(f"🔄 /refresh_menu command received from {telegram_id}")
+    
+    language = await get_user_language(session, telegram_id)
+    
+    # Check if user is admin
+    if telegram_id not in ADMIN_IDS:
+        text = "❌ Non hai i permessi per eseguire questo comando."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
+        return
+    
+    # Notify user that refresh is starting
+    text = "🔄 Avvio aggiornamento menu...\nQuesta operazione potrebbe richiedere qualche minuto."
+    translated = await translate_text(text, language)
+    status_msg = await update.effective_message.reply_text(translated)
+    
+    try:
+        # Import here to avoid circular imports
+        from services.scraper_service import fetch_and_store_menus
+        
+        # Run scraper service
+        await fetch_and_store_menus()
+        
+        # Success message
+        text = "✅ Menu aggiornati con successo!\nUsa /menu per visualizzare i nuovi menu."
+        translated = await translate_text(text, language)
+        await status_msg.edit_text(translated)
+        
+    except Exception as e:
+        logger.error(f"❌ Error during menu refresh: {e}", exc_info=True)
+        text = f"❌ Errore durante l'aggiornamento: {str(e)}"
+        translated = await translate_text(text, language)
+        await status_msg.edit_text(translated)
+
+
+# Also update the menu_command to show when data was last updated
 @inject_db
 async def menu_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
 ) -> None:
-    """Handler for /menu. Fetches today's menu from the DB."""
+    """
+    Handler for /menu command - Shows today's menu
+    """
     if not update.effective_user or not update.effective_message:
         return
 
@@ -154,72 +249,101 @@ async def menu_command(
     telegram_id = update.effective_user.id
     logger.info(f"🍽️ /menu command received from {telegram_id}")
 
-    user_repo = UserRepository(session)
-    menu_repo = MenuRepository(session)
-    canteen_repo = CanteenRepository(session)
+    try:
+        logger.info("Step 1: Creating repository")
+        user_repo = UserRepository(session)
+        menu_repo = MenuRepository(session)
+        canteen_repo = CanteenRepository(session)
+        logger.debug("✓ Repositories created")
 
-    user = await user_repo.get_by_telegram_id(telegram_id)
+        logger.debug(f"Step 2: Getting user {telegram_id}...")
+        user = await user_repo.get_by_telegram_id(telegram_id)
+        logger.debug(f"Obtained user {user}")
+        if not user:
+            text = "⚠️ Non sei registrato. Usa /start prima."
+            translated = await translate_text(text, "it")
+            await update.effective_message.reply_text(translated)
+            return
 
-    if not user:
-        text = "⚠️ Non sei registrato. Usa /start prima."
-        translated = await translate_text(text, "it")
-        await update.effective_message.reply_text(translated)
-        return
+        logger.debug(f"Step 3: Getting user language and canteens...")
+        language = user.language
+        canteen_ids = user.selected_canteen_ids
+        logger.debug(f"✓ Language: {language}, Canteen IDs: {canteen_ids}")
 
-    language = user.language
-    canteen_ids = user.selected_canteen_ids
+        if not canteen_ids:
+            text = "⚠️ Non sei iscritto a nessuna mensa.\nUsa /subscribe_canteen per iscriverti."
+            translated = await translate_text(text, language)
+            await update.effective_message.reply_text(translated, parse_mode='HTML')
+            return
 
-    if not canteen_ids:
-        text = "⚠️ Non sei iscritto a nessuna mensa.\nUsa /subscribe_canteen per iscriverti."
-        translated = await translate_text(text, language)
+        today = date.today()
+        current_hour = datetime.now().hour
+        meal_type = "lunch" if current_hour < 15 else "dinner"
+        logger.debug(f"✓ Date: {today}, Meal type: {meal_type}")
+
+        logger.info("Cercando i menù nei repository")
+        import asyncio
+        try:
+            menus = await asyncio.wait_for(
+                menu_repo.get_menus_by_date_for_canteens(
+                    today, canteen_ids, meal_type
+                ),
+                timeout=1000
+            )
+            logger.debug(f"✓ Menus retrieved: {len(menus)} found")
+        except asyncio.TimeoutError:
+            logger.error("❌ TIMEOUT: Query took more than 10 seconds!")
+            await update.effective_message.reply_text("⚠️ Errore: timeout database. Riprova.")
+            return
+        if not menus:
+            logger.warning(f"No menus found for canteens {canteen_ids} on {today}")
+            text = (
+                f"📅 Menu del {today.strftime('%d/%m/%Y')} ({meal_type})\n\n"
+                "❌ Nessun menu disponibile per le tue mense.\n"
+                "Riprova più tardi o contatta un admin per /refresh_menu"
+            )
+            translated = await translate_text(text, language)
+            await update.effective_message.reply_text(translated, parse_mode='HTML')
+            return
+
+        logger.info(f"🍽️ Menu del {today.strftime('%d/%m/%Y')} ({meal_type})\n\n")
+        # Build response with menus
+        response_text = f"🍽️ Menu del {today.strftime('%d/%m/%Y')} ({meal_type})\n\n"
+        
+        for menu in menus:
+            canteen = await canteen_repo.get_by_id(menu.canteen_id)
+            if not canteen:
+                continue
+            
+            response_text += f"📍 <b>{canteen.name}</b>\n"
+            response_text += f"   <i>{canteen.location_description}</i>\n\n"
+            
+            # Use translated text based on user language
+            if language != "it" and menu.translated_text:
+                response_text += menu.translated_text + "\n\n"
+            elif menu.original_text:
+                response_text += menu.original_text + "\n\n"
+            else:
+                # Fallback to courses_json if available
+                courses = menu.courses_json
+                if isinstance(courses, dict) and "raw_lines" in courses:
+                    for line in courses["raw_lines"][:10]:  # Limit lines
+                        response_text += f"{line}\n"
+                    response_text += "\n"
+            
+            response_text += "─" * 30 + "\n\n"
+
+        # Add timestamp footer
+        footer = f"\n<i>Ultimo aggiornamento: {datetime.now().strftime('%H:%M')}</i>"
+        response_text += footer
+
+        logger.info(f"Response_text: {response_text}")
+        # Translate and send
+        translated = await translate_text(response_text, language)
         await update.effective_message.reply_text(translated, parse_mode='HTML')
-        return
-
-    today = date.today()
-    current_hour = datetime.now().hour
-    meal_type = "pranzo" if current_hour < 15 else "cena"
-
-    menus = await menu_repo.get_menus_by_date_for_canteens(
-        today, canteen_ids, "lunch" if current_hour < 15 else "dinner"
-    )
-
-    if not menus:
-        text = f"📅 Menu del {today.strftime('%d/%m/%Y')} ({meal_type})\n\n❌ Nessun menu disponibile per le tue mense.\nRiprova più tardi."
-        translated = await translate_text(text, language)
-        await update.effective_message.reply_text(translated, parse_mode='HTML')
-        return
-
-    response_text = f"🍽️ Menu del {today.strftime('%d/%m/%Y')} ({meal_type})\n\n"
-    
-    for menu in menus:
-        canteen = await canteen_repo.get_by_id(menu.canteen_id)
-        if not canteen:
-            continue
-        
-        response_text += f"📍 <b>{canteen.name}</b>\n"
-        response_text += f"   <i>{canteen.location_description}</i>\n\n"
-        
-        # Use translated or original text based on language
-        if language != "it" and menu.translated_text:
-            response_text += menu.translated_text + "\n\n"
-        elif menu.original_text:
-            response_text += menu.original_text + "\n\n"
-        else:
-            courses = menu.courses_json
-            if isinstance(courses, dict):
-                for course_type, dishes in courses.items():
-                    response_text += f"<b>{course_type.upper()}:</b>\n"
-                    for dish in dishes:
-                        response_text += f"  • {dish}\n"
-                response_text += "\n"
-        
-        response_text += "─" * 30 + "\n\n"
-
-    # Translate the entire menu text
-    translated = await translate_text(response_text, language)
-    await update.effective_message.reply_text(translated, parse_mode='HTML')
-
-
+    except Exception as e:
+        logger.error(f"❌ Error in menu_command: {e}", exc_info=True)
+        await update.effective_message.reply_text("⚠️ Errore interno. Riprova più tardi.")
 @inject_db
 async def cancel_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
@@ -538,10 +662,11 @@ async def print_all_canteen(
         canteen_name = canteen.name.replace("_", " ")
         text += f"📍 {canteen_name}\n"
         text += f"   {canteen.location_description.strip('"')}\n"
-        text += f"   {'✅' if canteen.is_active else '❌'}\n\n"
+        translated_is_active_text = await translate_text(f"   Attiva? {'✅' if canteen.is_active else '❌'}", language)
+        text += translated_is_active_text
+        text += "\n\n"
     
-    translated = await translate_text(text, language)
-    await update.effective_message.reply_text(translated, parse_mode='HTML')
+    await update.effective_message.reply_text(text, parse_mode='HTML')
 
 
 @inject_db
@@ -583,12 +708,15 @@ async def print_subscribed_canteen(
     for canteen_id in user.selected_canteen_ids:
         canteen = await canteen_repo.get_by_id(canteen_id)
         if canteen:
-            text += f"📍 {canteen.name}\n"
-            text += f"   {canteen.location_description}\n"
-            text += f"   {'✅' if canteen.is_active else '❌'}\n\n"
+            canteen_name = canteen.name.replace("_", " ")
+            text += f"📍 {canteen_name}\n"
+            text += f"   {canteen.location_description.strip('"')}\n"
+            translated_is_active_text = await translate_text(f"   Attiva? {'✅' if canteen.is_active else '❌'}", language)
+            text += translated_is_active_text
+            text += "\n\n"
     
-    translated = await translate_text(text, language)
-    await update.effective_message.reply_text(translated, parse_mode='HTML')
+        
+    await update.effective_message.reply_text(text, parse_mode='HTML')
 
 
 @inject_db
@@ -622,9 +750,7 @@ async def set_language(
         return
     
     language = context.args[0].lower()
-    
-    # Validate language code (googletrans supports many codes)
-    
+        
     if language not in LANGUAGES:
         text = f"❌ Lingua non supportata.\nLingue disponibili: {', '.join(LANGUAGES)}"
         translated = await translate_text(text, current_language)
@@ -639,3 +765,4 @@ async def set_language(
         await update.effective_message.reply_text(translated)
     else:
         await update.effective_message.reply_text("Error / Errore")
+
