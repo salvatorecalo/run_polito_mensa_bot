@@ -8,7 +8,6 @@ import sys
 # Global flag to ensure we only configure third-party loggers once
 _logging_configured = False
 
-
 class InstagramLogFilter(logging.Filter):
     """Filtro per ridurre il rumore dei log di Instagram API"""
 

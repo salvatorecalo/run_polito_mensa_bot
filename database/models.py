@@ -64,7 +64,6 @@ class Menu(SQLModel, table=True):
 
     # Full text fields for reference
     original_text: str  # Original OCR text (Italian)
-    translated_text: str  # Translated text (English)
 
     # Image reference
     image_path: Optional[str] = Field(default=None, max_length=255)
@@ -92,6 +91,6 @@ class User(SQLModel, table=True):
     )
     is_active: bool = Field(default=True)
     language: str = Field(default="en", max_length=5)  # "en" or "it"
-
+    image_or_text: str = Field(default="image")
     subscribed_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
