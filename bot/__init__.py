@@ -13,7 +13,9 @@ from .handlers import \
         unsubscribe_canteen, \
         print_subscribed_canteen, \
         set_language, \
-        refresh_menu
+        refresh_menu, \
+        set_user_image_or_text_option,\
+        get_user_image_or_text_option
 from .scheduler import BotScheduler
 
 __all__ = [
@@ -28,5 +30,7 @@ __all__ = [
     "print_all_canteen",
     "print_subscribed_canteen",
     "set_language",
-    "refresh_menu"
+    "refresh_menu",
+    "set_user_image_or_text_option",
+    "get_user_image_or_text_option"
 ]
