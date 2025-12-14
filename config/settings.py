@@ -27,6 +27,4 @@ CREATED_IMAGES_DIR = "download/created_images"
 # Retry
 MAX_RETRIES = 3
 
-ADMIN_IDS = convert_admin_ids(os.getenv('TELEGRAM_BOT_ADMINS'))
-
-    
+ADMIN_IDS = convert_admin_ids(os.getenv('TELEGRAM_BOT_ADMINS', ""))
