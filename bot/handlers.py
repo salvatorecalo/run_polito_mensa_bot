@@ -10,6 +10,7 @@ import os
 from googletrans import Translator, LANGUAGES
 from telegram import Update
 from telegram.ext import ContextTypes
+import re
 
 from utils.image_processing import create_long_image
 from database.connection import get_session_maker
@@ -24,9 +25,7 @@ logger = setup_logger(__name__)
 # Setup translator
 translator = Translator()
 
-
 # --- Dependency Injection Decorator ---
-
 
 def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
     """
@@ -59,14 +58,7 @@ def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
 
     return wrapper
 
-
 # --- Helper Functions ---
-
-import re
-
-# --- Helper Functions ---
-
-import re
 
 async def translate_text(text: str, dest_language: str) -> str:
     """
@@ -478,7 +470,6 @@ async def subscribe_canteen(
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated, parse_mode='HTML')
 
-
 @inject_db
 async def unsubscribe_canteen(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
@@ -553,14 +544,13 @@ async def unsubscribe_canteen(
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated, parse_mode='HTML')
 
-
 # --- ADMIN COMMANDS ---
 
 @inject_db
 async def add_mensa(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
 ):
-    """Admin command to add a new canteen"""
+    """Admin command to add a new canteen - inline version with separator"""
     if not update.effective_user or not update.effective_message:
         return
     
@@ -573,41 +563,86 @@ async def add_mensa(
     user_repo = UserRepository(session)
     language = await user_repo.get_user_language(session, telegram_id)
     
+    # Check admin
     if telegram_id not in ADMIN_IDS:
-        logger.error("Messaggio /add_mensa non inviato da un admin")
         text = "❌ Non hai i permessi per eseguire questo comando."
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated)
         return
     
-    if not context.args or len(context.args) < 2:
-        logger.error("Argomenti mancanti nel comando /add_mensa")
-        text = "⚠️ Sintassi: /add_mensa [NOME_MENSA] [INDIRIZZO]"
+    # Parse con separatore "|" o ","
+    if not context.args:
+        text = (
+            "⚠️ <b>Sintassi corretta:</b>\n\n"
+            "/add_mensa Nome Mensa | Indirizzo completo\n\n"
+            "<b>Esempi:</b>\n"
+            "• /add_mensa Mensa Centrale | Torino, Campus Luigi Einaudi\n"
+            "• /add_mensa Palazzo Nuovo | Via Sant'Ottavio 20, Torino\n"
+            "• /add_mensa Biotecnologie | Via Nizza 52"
+        )
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
+        return
+    
+    # Unisci tutti gli argomenti
+    full_text = ' '.join(context.args)
+    
+    # Splitta usando "|" come separatore
+    if '|' not in full_text:
+        text = (
+            "⚠️ <b>Formato non valido!</b>\n\n"
+            "Usa il simbolo <b>|</b> per separare nome e indirizzo:\n"
+            "/add_mensa Nome Mensa | Indirizzo"
+        )
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
+        return
+    
+    # Estrai nome e location
+    parts = full_text.split('|', 1)  # Split solo sulla prima occorrenza
+    name = parts[0].strip()
+    location = parts[1].strip() if len(parts) > 1 else ''
+    
+    # Validazioni
+    if not name or len(name) < 3:
+        text = "⚠️ Il nome della mensa deve essere almeno 3 caratteri."
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated)
         return
     
-    canteen_repository = CanteenRepository(session)
+    if not location or len(location) < 5:
+        text = "⚠️ L'indirizzo deve essere almeno 5 caratteri."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated)
+        return
     
+    # Verifica duplicati
+    canteen_repo = CanteenRepository(session)
+    existing = await canteen_repo.get_by_name(name)
+    if existing:
+        text = f"⚠️ La mensa <b>{name}</b> esiste già nel database."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
+        return
+    
+    # Crea mensa
     new_canteen = Canteen(
-        name=context.args[0], 
-        location_description=" ".join(context.args[1:])
+        name=name,
+        location_description=location
     )
     
-    existing = await canteen_repository.get_by_name(new_canteen.name)
-    if existing:
-        text = "⚠️ Questa mensa esiste già nel database."
-        translated = await translate_text(text, language)
-        await update.effective_message.reply_text(translated)
-        return
+    await canteen_repo.create(new_canteen)
     
-    await canteen_repository.create(new_canteen)
-    
-    text = f"✅ Mensa {new_canteen.name} in {new_canteen.location_description} aggiunta correttamente!"
+    text = (
+        f"✅ Mensa aggiunta con successo!\n\n"
+        f"📍 <b>{name}</b>\n"
+        f"🗺️ {location}"
+    )
     translated = await translate_text(text, language)
     await update.effective_message.reply_text(translated, parse_mode='HTML')
-
-
+    
+    logger.info(f"✅ Canteen '{name}' created successfully")
+    
 @inject_db
 async def delete_mensa(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
@@ -633,39 +668,44 @@ async def delete_mensa(
         return
     
     if not context.args:
-        logger.error("Argomenti mancanti nel comando /delete_mensa")
-        text = "⚠️ Sintassi: /delete_mensa [NOME_MENSA]"
+        text = (
+            "⚠️ <b>Sintassi corretta:</b>\n\n"
+            "/delete_mensa Nome Mensa \n\n"
+            "<b>Esempio:</b>\n"
+            "• /delete_mensa Mensa Centrale\n"
+        )
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
+        return
+    
+    # Unisci tutti gli argomenti
+    name = ' '.join(context.args)
+    
+    # Validazioni
+    if not name:
+        text = "⚠️ Il nome della mensa deve essere almeno 3 caratteri."
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated)
         return
-    
-    canteen_repo = CanteenRepository(session)   
-    canteen_name = " ".join(context.args)
-    canteen = await canteen_repo.get_by_name(canteen_name)
-    
-    if not canteen or canteen.id is None:
-        all_canteens = await canteen_repo.get_all_active()
-        text = f"❌ Mensa '{canteen_name}' non trovata nel database.\nDevi inserire una di queste mense:"
-        translated = await translate_text(text, language)
-        msg = f"{translated}\n\n"
-        
-        for c in all_canteens:
-            msg += f"  • {c.name}\n"
-        
-        await update.effective_message.reply_text(msg, parse_mode='HTML')
-        return 
 
-    success = await canteen_repo.delete(canteen.id)
+    canteen_repo = CanteenRepository(session)
+    existing = await canteen_repo.get_by_name(name)
+    if not existing:
+        text = f"⚠️ La mensa <b>{name}</b> non esiste nel database."
+        translated = await translate_text(text, language)
+        await update.effective_message.reply_text(translated, parse_mode='HTML')
+        return
+    
+    success = await canteen_repo.delete(existing.id if existing.id != None else 1)
     
     if success:
-        text = f"✅ Mensa {canteen.name} eliminata correttamente."
+        text = f"✅ Mensa {existing.name} eliminata correttamente."
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated, parse_mode='HTML')
     else:
         text = "⚠️ Errore durante l'eliminazione della mensa."
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated)
-
 
 @inject_db
 async def print_all_canteen(
