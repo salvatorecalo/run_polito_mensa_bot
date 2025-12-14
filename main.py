@@ -6,7 +6,7 @@ import asyncio
 import signal
 import sys
 
-from config.settings import TARGET_USER
+from config.settings import DOWNLOAD_DIR
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 
-from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_mensa, delete_mensa, print_all_canteen, unsubscribe_canteen, print_subscribed_canteen, set_language, refresh_menu
+from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_mensa, delete_mensa, print_all_canteen, unsubscribe_canteen, print_subscribed_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option
 from bot.scheduler import BotScheduler
 from config import TELEGRAM_TOKEN
 from database.connection import close_db, create_db_and_tables, get_session, init_db
@@ -25,7 +25,7 @@ from database.repositories import UserRepository
 from services.notification_service import NotificationService
 from services.scraper_service import fetch_and_store_menus
 from utils.logger import setup_logger
-
+import os
 # Setup Logger
 logger = setup_logger(__name__)
 
@@ -135,7 +135,10 @@ async def main():
         app.add_handler(CommandHandler("print_subscribed_canteen", print_subscribed_canteen))
         app.add_handler(CommandHandler("set_language", set_language))
         app.add_handler(CommandHandler("refresh_menu", refresh_menu))
-        
+        app.add_handler(CommandHandler("set_user_image_or_text_option", set_user_image_or_text_option))
+        app.add_handler(CommandHandler("get_user_image_or_text_option", get_user_image_or_text_option))
+
+
         app.add_handler(
             ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
         )
@@ -147,7 +150,8 @@ async def main():
         logger.info("🤖 Initializing Bot...")
         await app.initialize()
         await app.start()
-
+        
+        logger.info("Creating download/stories directory (no if exists)")
 
         if app.updater is None:
             raise RuntimeError("Telegram Updater is None (polling not possible)")

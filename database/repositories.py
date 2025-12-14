@@ -550,3 +550,46 @@ class UserRepository(BaseRepository[User]):
         user.language = new_language
         await self.session.commit()
         return True
+    
+    async def get_user_language(self, session, telegram_id: int) -> str:
+        """
+        Get user's language preference, default to it
+        
+        Args:
+            session: Database session
+            telegram_id: Telegram user ID
+        
+        Returns:
+            Language code (e.g., 'it', 'en')
+        """
+        try:
+            user_repo = UserRepository(session)
+            user = await user_repo.get_by_telegram_id(telegram_id)
+            return user.language if user else "en"
+        except Exception as e:
+            logger.error(f"Error getting user language: {e}")
+            return "en"  # Default fallback
+    
+    async def set_user_image_or_text_option(self, telegram_id: int, newType: str) -> bool:
+        try:
+            user = await self.get_by_telegram_id(telegram_id)
+            if not user:
+                return False
+            user.image_or_text = newType
+            await self.session.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error setting image or text type {e}")
+            return False
+    
+    
+    async def get_user_image_or_text_option(self, telegram_id: int) -> str:
+        try:
+            user = await self.get_by_telegram_id(telegram_id)
+            if not user:
+                return ""
+            return user.image_or_text
+        except Exception as e:
+            logger.error(f"Error setting image or text type {e}")
+            return ""
+            
