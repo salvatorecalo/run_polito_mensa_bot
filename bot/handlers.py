@@ -1,21 +1,22 @@
 """
 Telegram Bot Handlers with Dependency Injection and Async Database Support
 """
-
+import html
 from utils.logger import setup_logger
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from functools import wraps
 from typing import Any, Callable
-
+import os
 from googletrans import Translator, LANGUAGES
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from utils.image_processing import create_long_image
 from database.connection import get_session_maker
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from database.models import Canteen
 
-from config.settings import ADMIN_IDS
+from config.settings import ADMIN_IDS, CREATED_IMAGES_DIR 
 
 # Setup logger
 logger = setup_logger(__name__)
@@ -108,26 +109,6 @@ async def translate_text(text: str, dest_language: str) -> str:
         logger.error(f"Translation error: {e}")
         return text  # Fallback to original text
 
-
-async def get_user_language(session, telegram_id: int) -> str:
-    """
-    Get user's language preference, default to it
-    
-    Args:
-        session: Database session
-        telegram_id: Telegram user ID
-    
-    Returns:
-        Language code (e.g., 'it', 'en')
-    """
-    try:
-        user_repo = UserRepository(session)
-        user = await user_repo.get_by_telegram_id(telegram_id)
-        return user.language if user else "en"
-    except Exception as e:
-        logger.error(f"Error getting user language: {e}")
-        return "en"  # Default fallback
-    
 # --- Handlers ---
 
 
@@ -197,8 +178,8 @@ async def refresh_menu(
     
     telegram_id = update.effective_user.id
     logger.info(f"🔄 /refresh_menu command received from {telegram_id}")
-    
-    language = await get_user_language(session, telegram_id)
+    user_repo = UserRepository(session)
+    language = await user_repo.get_user_language(session, telegram_id)
     
     # Check if user is admin
     if telegram_id not in ADMIN_IDS:
@@ -230,8 +211,6 @@ async def refresh_menu(
         translated = await translate_text(text, language)
         await status_msg.edit_text(translated)
 
-
-# Also update the menu_command to show when data was last updated
 @inject_db
 async def menu_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
@@ -259,14 +238,14 @@ async def menu_command(
         logger.debug(f"Step 2: Getting user {telegram_id}...")
         user = await user_repo.get_by_telegram_id(telegram_id)
         logger.debug(f"Obtained user {user}")
+        
         if not user:
             text = "⚠️ Non sei registrato. Usa /start prima."
-            translated = await translate_text(text, "it")
-            await update.effective_message.reply_text(translated)
+            await update.effective_message.reply_text(text)
             return
 
         logger.debug(f"Step 3: Getting user language and canteens...")
-        language = user.language
+        language = user.language  # User's preferred language
         canteen_ids = user.selected_canteen_ids
         logger.debug(f"✓ Language: {language}, Canteen IDs: {canteen_ids}")
 
@@ -288,25 +267,30 @@ async def menu_command(
                 menu_repo.get_menus_by_date_for_canteens(
                     today, canteen_ids, meal_type
                 ),
-                timeout=1000
+                timeout=10.0
             )
-            logger.debug(f"✓ Menus retrieved: {len(menus)} found")
+            logger.info(f"✓ Menus retrieved: {len(menus)} found")
         except asyncio.TimeoutError:
             logger.error("❌ TIMEOUT: Query took more than 10 seconds!")
             await update.effective_message.reply_text("⚠️ Errore: timeout database. Riprova.")
             return
+        
         if not menus:
             logger.warning(f"No menus found for canteens {canteen_ids} on {today}")
             text = (
                 f"📅 Menu del {today.strftime('%d/%m/%Y')} ({meal_type})\n\n"
-                "❌ Nessun menu disponibile per le tue mense.\n"
-                "Riprova più tardi o contatta un admin per /refresh_menu"
+                "❌ Menu non ancora disponibile per le tue mense.\n\n"
+                "I menu vengono aggiornati automaticamente:\n"
+                "🕐 ore 11:25 (pranzo)\n"
+                "🕗 ore 20:00 (cena)\n\n"
+                "Riprova tra qualche minuto! ⏰"
             )
             translated = await translate_text(text, language)
             await update.effective_message.reply_text(translated, parse_mode='HTML')
             return
 
-        logger.info(f"🍽️ Menu del {today.strftime('%d/%m/%Y')} ({meal_type})\n\n")
+        logger.info(f"Building response for {len(menus)} menus")
+        
         # Build response with menus
         response_text = f"🍽️ Menu del {today.strftime('%d/%m/%Y')} ({meal_type})\n\n"
         
@@ -315,35 +299,87 @@ async def menu_command(
             if not canteen:
                 continue
             
-            response_text += f"📍 <b>{canteen.name}</b>\n"
-            response_text += f"   <i>{canteen.location_description}</i>\n\n"
+            # Add canteen header (always visible)
+            canteen_name = canteen.name.replace("_", " ")
+            canteen_location = canteen.location_description.strip('"')
+            response_text += f"📍 <b>{html.escape(canteen_name)}</b>\n"
+            response_text += f"   <i>{html.escape(canteen_location)}</i>\n\n"
             
-            # Use translated text based on user language
-            if language != "it" and menu.translated_text:
-                response_text += menu.translated_text + "\n\n"
-            elif menu.original_text:
-                response_text += menu.original_text + "\n\n"
-            else:
-                # Fallback to courses_json if available
-                courses = menu.courses_json
-                if isinstance(courses, dict) and "raw_lines" in courses:
-                    for line in courses["raw_lines"][:10]:  # Limit lines
-                        response_text += f"{line}\n"
-                    response_text += "\n"
+            # Get menu text (original Italian)
+            menu_text = menu.original_text if menu.original_text else ""
             
+            # Translate menu on-demand if user language is not Italian
+            if language != "it" and menu_text:
+                try:
+                    logger.debug(f"Translating menu from Italian to {language}")
+                    result = await translator.translate(menu_text, src="it", dest=language)
+                    menu_text = result.text
+                    logger.info(f"🌐 Menu translated to {language}")
+                except Exception as e:
+                    logger.error(f"Translation error: {e}")
+                    # Fallback to Italian if translation fails
+                    menu_text = menu.original_text
+            
+            # CRITICAL: Escape HTML characters to prevent parse errors
+            menu_text_escaped = html.escape(menu_text)
+            
+            response_text += menu_text_escaped + "\n\n"
             response_text += "─" * 30 + "\n\n"
 
         # Add timestamp footer
-        footer = f"\n<i>Ultimo aggiornamento: {datetime.now().strftime('%H:%M')}</i>"
-        response_text += footer
+        timestamp = datetime.now(timezone.utc).strftime('%H:%M')
+        footer_text = f"Ultimo aggiornamento: {timestamp}"
+        
+        # Translate footer if needed
+        if language != "it":
+            try:
+                footer_translated = await translate_text(footer_text, language)
+                footer_text = footer_translated
+            except Exception as e:
+                logger.error(f"Footer translation error: {e}")
+                # Keep Italian if translation fails
+        
+        response_text += f"<i>{html.escape(footer_text)}</i>"
 
-        logger.info(f"Response_text: {response_text}")
-        # Translate and send
-        translated = await translate_text(response_text, language)
-        await update.effective_message.reply_text(translated, parse_mode='HTML')
+        logger.debug("Sending response to user")
+        # QUI
+        if user.image_or_text == "text":
+            await update.effective_message.reply_text(response_text, parse_mode='HTML')
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"menu_{telegram_id}_{timestamp}.jpg"
+            image_path = os.path.join(CREATED_IMAGES_DIR, filename)
+            os.makedirs(CREATED_IMAGES_DIR, exist_ok=True)
+            
+            try:
+                clean_text = html.unescape(re.sub(r'<[^>]+>', '', response_text))
+                created_image_path = create_long_image(
+                    text=clean_text,
+                    output_path=image_path
+                )
+                with open(created_image_path, 'rb') as photo:
+                    await update.effective_message.reply_photo(
+                        photo=photo,
+                        caption=f"🍽️ Menu del {today.strftime('%d/%m/%Y')} ({meal_type})"
+                    )      
+            except Exception as e:
+                logger.error(f"Error creating/sending image: {e}", exc_info=True)
+                # Fallback al testo se l'immagine fallisce
+                await update.effective_message.reply_text(response_text, parse_mode='HTML')
+                
+        
     except Exception as e:
         logger.error(f"❌ Error in menu_command: {e}", exc_info=True)
-        await update.effective_message.reply_text("⚠️ Errore interno. Riprova più tardi.")
+        
+        # Fallback error message
+        error_msg = "⚠️ Si è verificato un errore interno. Riprova più tardi."
+        try:
+            if language != "it":
+                error_msg = await translate_text(error_msg, language)
+        except:
+            pass  # Keep Italian if translation fails
+        
+        await update.effective_message.reply_text(error_msg)
 @inject_db
 async def cancel_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
@@ -358,8 +394,8 @@ async def cancel_command(
 
     telegram_id = update.effective_user.id
     repo = UserRepository(session)
-
-    language = await get_user_language(session, telegram_id)
+    
+    language = await repo.get_user_language(session, telegram_id)
     success = await repo.update_status(telegram_id, is_active=False)
 
     if success:
@@ -534,8 +570,8 @@ async def add_mensa(
     
     telegram_id = update.effective_user.id
     logger.info(f"🍽️ /add_mensa command received from {telegram_id}")
-    
-    language = await get_user_language(session, telegram_id)
+    user_repo = UserRepository(session)
+    language = await user_repo.get_user_language(session, telegram_id)
     
     if telegram_id not in ADMIN_IDS:
         logger.error("Messaggio /add_mensa non inviato da un admin")
@@ -586,8 +622,8 @@ async def delete_mensa(
     
     telegram_id = update.effective_user.id
     logger.info(f"🍽️ /delete_mensa command received from {telegram_id}")
-    
-    language = await get_user_language(session, telegram_id)
+    user_repo = UserRepository(session)
+    language = await user_repo.get_user_language(session, telegram_id)
     
     if telegram_id not in ADMIN_IDS:
         logger.error("Messaggio /delete_mensa non inviato da un admin")
@@ -645,8 +681,8 @@ async def print_all_canteen(
     
     telegram_id = update.effective_user.id
     logger.info(f"🍽️ /print_all_canteen command received from {telegram_id}")
-    
-    language = await get_user_language(session, telegram_id)
+    user_repo = UserRepository(session)
+    language = await user_repo.get_user_language(session, telegram_id)
     canteen_repo = CanteenRepository(session)
     all_canteens = await canteen_repo.get_all_active()
     
@@ -766,3 +802,59 @@ async def set_language(
     else:
         await update.effective_message.reply_text("Error / Errore")
 
+@inject_db
+async def set_user_image_or_text_option(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
+    if not update.effective_user or not update.effective_message:
+        return 
+    
+    if not session:
+        logger.error("No session in set_user_image_or_text_option")
+        return
+    
+    userRepo = UserRepository(session)
+    telegram_id = update.effective_user.id
+    user = await userRepo.get_by_telegram_id(telegram_id)
+    if not user:
+        logger.error("No user found")
+        return
+    
+    if not context.args:
+        await update.effective_message.reply_text(
+            "Devi specificare il comando nel formato /set_image_or_text [OPTION]\nDove [OPTION] può essere o <code>image</code> o <code>text</code>",
+            parse_mode="HTML"
+        )
+        return
+    newOption = context.args[0].lower()
+    new_option_list = ["image", "text"]
+    if newOption not in new_option_list:
+        reply_text = "Opzione non valida\nPuoi scegliere solo tra "
+        reply_text += ", ".join(new_option_list)
+        await update.effective_message.reply_text(reply_text)
+        return
+    user.image_or_text = newOption
+    await update.effective_message.reply_text("Hai impostato correttamente la nuova preferenza.")
+     
+@inject_db  
+async def get_user_image_or_text_option(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None) -> None:
+    if not update.effective_user or not update.effective_message:
+        return
+    
+    if not session:
+        logger.error("No session in set_user_image_or_text_option")
+        return
+    
+    userRepo = UserRepository(session)
+    telegram_id = update.effective_user.id
+    user = await userRepo.get_by_telegram_id(telegram_id)
+    if not user:
+        logger.error("No user found")
+        return
+
+    await update.effective_message.reply_text(
+        f"Attualmente hai impostato: <code>{user.image_or_text}</code>"
+    "\nPer cambiare opzione scrivi /set_image_or_text_option [OPZIONE]\n"
+    "Opzioni disponibili:\n- image\n-text",
+    parse_mode="HTML")
+        
+    
+  
