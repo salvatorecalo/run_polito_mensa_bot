@@ -1,6 +1,6 @@
 from utils.logger import setup_logger
 import os
-
+import shutil
 logger = setup_logger(__name__)
 
 def clean_download_directory(download_dir) -> None:

@@ -6,7 +6,6 @@ import asyncio
 import signal
 import sys
 
-from config.settings import DOWNLOAD_DIR
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -25,7 +24,7 @@ from database.repositories import UserRepository
 from services.notification_service import NotificationService
 from services.scraper_service import fetch_and_store_menus
 from utils.logger import setup_logger
-import os
+
 # Setup Logger
 logger = setup_logger(__name__)
 

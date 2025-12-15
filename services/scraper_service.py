@@ -10,7 +10,7 @@ from datetime import date, datetime
 import cv2
 import pytesseract
 import requests
-from utils.clean_download_directory import clean_download_directory
+from utils.file_operations import clean_directory
 
 from config import DOWNLOAD_DIR
 from database.connection import create_db_and_tables, get_session, init_db
@@ -21,13 +21,12 @@ from services.web_scraping_service import WebScrapingService
 
 logger = setup_logger(__name__)
 
-
 async def fetch_and_store_menus() -> None:
     """
     Main entry point: Fetches stories, processes them, and upserts into the DB.
     """
     logger.info("🚀 Starting Scraper Service...")
-    clean_download_directory(DOWNLOAD_DIR)
+    clean_directory(DOWNLOAD_DIR)
     # 1. Initialize Database
     await init_db()
     await create_db_and_tables()
