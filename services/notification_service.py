@@ -48,10 +48,10 @@ class NotificationService:
             #    Structure: {canteen_id: [user_list]}
             users_by_canteen = {}
             for user in users:
-                if user.selected_canteen_id:
-                    if user.selected_canteen_id not in users_by_canteen:
-                        users_by_canteen[user.selected_canteen_id] = []
-                    users_by_canteen[user.selected_canteen_id].append(user)
+                if user.selected_canteen_ids:
+                    if user.selected_canteen_ids not in users_by_canteen:
+                        users_by_canteen[user.selected_canteen_ids] = []
+                    users_by_canteen[user.selected_canteen_ids].append(user)
 
             # 4. Process each canteen
             for canteen_id, canteen_users in users_by_canteen.items():
@@ -102,24 +102,21 @@ class NotificationService:
             f"📅 {menu.date.strftime('%d/%m/%Y')} - {menu.meal_type.capitalize()}\n\n"
         )
 
-        # Prefer translated text if clean, otherwise fallback to parsed JSON
-        if menu.translated_text and len(menu.translated_text) > 10:
-            text += menu.translated_text
-        else:
+
             # Fallback to JSON
-            courses = menu.courses_json
-            if isinstance(courses, dict):
-                for course, dishes in courses.items():
-                    # Format header (e.g., "PRIMI")
-                    text += f"*{course.upper()}*:\n"
+        courses = menu.courses_json
+        if isinstance(courses, dict):
+            for course, dishes in courses.items():
+                # Format header (e.g., "PRIMI")
+                text += f"*{course.upper()}*:\n"
 
-                    if isinstance(dishes, list):
-                        for dish in dishes:
-                            text += f"- {dish}\n"
-                    elif isinstance(dishes, str):
-                        text += f"- {dishes}\n"
+                if isinstance(dishes, list):
+                    for dish in dishes:
+                        text += f"- {dish}\n"
+                elif isinstance(dishes, str):
+                    text += f"- {dishes}\n"
 
-                    text += "\n"
+                text += "\n"
 
         # Add footer
         text += "\n_Buon appetito! 😋_"
