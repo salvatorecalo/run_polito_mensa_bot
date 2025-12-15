@@ -547,7 +547,7 @@ async def unsubscribe_canteen(
 # --- ADMIN COMMANDS ---
 
 @inject_db
-async def add_mensa(
+async def add_canteen(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
 ):
     """Admin command to add a new canteen - inline version with separator"""
@@ -555,11 +555,11 @@ async def add_mensa(
         return
     
     if session is None:
-        logger.error("Session is None in the add_mensa command")
+        logger.error("Session is None in the add_canteen command")
         return
     
     telegram_id = update.effective_user.id
-    logger.info(f"🍽️ /add_mensa command received from {telegram_id}")
+    logger.info(f"🍽️ /add_canteen command received from {telegram_id}")
     user_repo = UserRepository(session)
     language = await user_repo.get_user_language(session, telegram_id)
     
@@ -574,11 +574,11 @@ async def add_mensa(
     if not context.args:
         text = (
             "⚠️ <b>Sintassi corretta:</b>\n\n"
-            "/add_mensa Nome Mensa | Indirizzo completo\n\n"
+            "/add_canteen Nome Mensa | Indirizzo completo\n\n"
             "<b>Esempi:</b>\n"
-            "• /add_mensa Mensa Centrale | Torino, Campus Luigi Einaudi\n"
-            "• /add_mensa Palazzo Nuovo | Via Sant'Ottavio 20, Torino\n"
-            "• /add_mensa Biotecnologie | Via Nizza 52"
+            "• /add_canteen Mensa Centrale | Torino, Campus Luigi Einaudi\n"
+            "• /add_canteen Palazzo Nuovo | Via Sant'Ottavio 20, Torino\n"
+            "• /add_canteen Biotecnologie | Via Nizza 52"
         )
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated, parse_mode='HTML')
@@ -592,7 +592,7 @@ async def add_mensa(
         text = (
             "⚠️ <b>Formato non valido!</b>\n\n"
             "Usa il simbolo <b>|</b> per separare nome e indirizzo:\n"
-            "/add_mensa Nome Mensa | Indirizzo"
+            "/add_canteen Nome Mensa | Indirizzo"
         )
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated, parse_mode='HTML')
@@ -644,7 +644,7 @@ async def add_mensa(
     logger.info(f"✅ Canteen '{name}' created successfully")
     
 @inject_db
-async def delete_mensa(
+async def delete_canteen(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session=None
 ):
     """Admin command to delete a canteen"""
@@ -652,16 +652,16 @@ async def delete_mensa(
         return
     
     if session is None:
-        logger.error("Session is None in the delete_mensa command")
+        logger.error("Session is None in the delete_canteen command")
         return
     
     telegram_id = update.effective_user.id
-    logger.info(f"🍽️ /delete_mensa command received from {telegram_id}")
+    logger.info(f"🍽️ /delete_canteen command received from {telegram_id}")
     user_repo = UserRepository(session)
     language = await user_repo.get_user_language(session, telegram_id)
     
     if telegram_id not in ADMIN_IDS:
-        logger.error("Messaggio /delete_mensa non inviato da un admin")
+        logger.error("Messaggio /delete_canteen non inviato da un admin")
         text = "❌ Non hai i permessi per eseguire questo comando."
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated)
@@ -670,9 +670,9 @@ async def delete_mensa(
     if not context.args:
         text = (
             "⚠️ <b>Sintassi corretta:</b>\n\n"
-            "/delete_mensa Nome Mensa \n\n"
+            "/delete_canteen Nome Mensa \n\n"
             "<b>Esempio:</b>\n"
-            "• /delete_mensa Mensa Centrale\n"
+            "• /delete_canteen Mensa Centrale\n"
         )
         translated = await translate_text(text, language)
         await update.effective_message.reply_text(translated, parse_mode='HTML')

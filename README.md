@@ -126,3 +126,4 @@ MIT License
 ## 👤 Autore
 
 [@itsPinguiz](https://github.com/itsPinguiz)
+[@SalvatoreCalo]('https://www.github.com/salvatorecalo)
