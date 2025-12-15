@@ -7,8 +7,8 @@ from .handlers import \
         menu_command,\
         start_command,\
         subscribe_canteen,\
-        add_mensa, \
-        delete_mensa,\
+        add_canteen, \
+        delete_canteen,\
         print_all_canteen, \
         unsubscribe_canteen, \
         print_subscribed_canteen, \
@@ -25,8 +25,8 @@ __all__ = [
     "BotScheduler",
     "subscribe_canteen",
     "unsubscribe_canteen",
-    "add_mensa",
-    "delete_mensa",
+    "add_canteen",
+    "delete_canteen",
     "print_all_canteen",
     "print_subscribed_canteen",
     "set_language",

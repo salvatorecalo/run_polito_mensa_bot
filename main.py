@@ -17,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 
-from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_mensa, delete_mensa, print_all_canteen, unsubscribe_canteen, print_subscribed_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option
+from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_canteen, delete_canteen, print_all_canteen, unsubscribe_canteen, print_subscribed_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option
 from bot.scheduler import BotScheduler
 from config import TELEGRAM_TOKEN
 from database.connection import close_db, create_db_and_tables, get_session, init_db
@@ -129,8 +129,8 @@ async def main():
         app.add_handler(CommandHandler("cancel", cancel_command))
         app.add_handler(CommandHandler("subscribe_canteen", subscribe_canteen))
         app.add_handler(CommandHandler("unsubscribe_canteen", unsubscribe_canteen))
-        app.add_handler(CommandHandler("add_mensa", add_mensa))
-        app.add_handler(CommandHandler("delete_mensa", delete_mensa))
+        app.add_handler(CommandHandler("add_canteen", add_canteen))
+        app.add_handler(CommandHandler("delete_canteen", delete_canteen))
         app.add_handler(CommandHandler("print_all_canteen", print_all_canteen))
         app.add_handler(CommandHandler("print_subscribed_canteen", print_subscribed_canteen))
         app.add_handler(CommandHandler("set_language", set_language))
