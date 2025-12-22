@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from utils import convert_admin_ids
+from utils.convert_admin_ids import convert_admin_ids
 
 # Determina il percorso della root del progetto
 ROOT_DIR = Path(__file__).parent.parent

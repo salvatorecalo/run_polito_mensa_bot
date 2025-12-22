@@ -15,5 +15,5 @@ def convert_admin_ids(admin_list: str):
     new_admin_list = []
     admin_list_formatted = admin_list.strip("[]").split(",")
     for id in admin_list_formatted:
-        new_admin_list.append(int(id))
+        new_admin_list.append(id)
     return new_admin_list
