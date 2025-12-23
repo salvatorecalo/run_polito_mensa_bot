@@ -2,18 +2,17 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-def convert_admin_ids(admin_list: str):
-    """
-        Utilitary function to convert each admin id to int when read from .env
-        
-        Parameters: 
-            - admin_list: list of the admin ids (in generali ADMIN_IDS in config/costants.py)
-    """
-    if admin_list is None:
-        logger.error("La lista degli admin non può essere vuota")
-        return
+def convert_admin_ids(admin_list_str: str):
+    if not admin_list_str or admin_list_str.strip() == "":
+        logger.warning("La lista degli admin è vuota")
+        return []
+    
+    clean_str = admin_list_str.replace("[", "").replace("]", "").replace('"', '').replace("'", "")
+    
     new_admin_list = []
-    admin_list_formatted = admin_list.strip("[]").split(",")
-    for id in admin_list_formatted:
-        new_admin_list.append(id)
+    for admin_id in clean_str.split(","):
+        admin_id = admin_id.strip()
+        if admin_id.isdigit():
+            new_admin_list.append(int(admin_id))
+            
     return new_admin_list

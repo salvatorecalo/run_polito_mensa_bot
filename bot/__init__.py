@@ -9,9 +9,7 @@ from .handlers import \
         subscribe_canteen,\
         add_canteen, \
         delete_canteen,\
-        print_all_canteen, \
         unsubscribe_canteen, \
-        print_subscribed_canteen, \
         set_language, \
         refresh_menu, \
         set_user_image_or_text_option,\
@@ -27,8 +25,6 @@ __all__ = [
     "unsubscribe_canteen",
     "add_canteen",
     "delete_canteen",
-    "print_all_canteen",
-    "print_subscribed_canteen",
     "set_language",
     "refresh_menu",
     "set_user_image_or_text_option",
