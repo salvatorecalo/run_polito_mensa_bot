@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from utils.convert_admin_ids import convert_admin_ids
 
 # Determina il percorso della root del progetto
 ROOT_DIR = Path(__file__).parent.parent
@@ -26,5 +25,3 @@ CREATED_IMAGES_DIR = "download/created_images"
 
 # Retry
 MAX_RETRIES = 3
-
-ADMIN_IDS = convert_admin_ids(os.getenv('TELEGRAM_BOT_ADMINS', ""))

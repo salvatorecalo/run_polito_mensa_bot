@@ -364,6 +364,24 @@ class UserRepository(BaseRepository[User]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def is_admin(self, telegram_id: int) -> bool:
+        user = await self.get_by_telegram_id(telegram_id)
+        if user:
+            if user.is_admin:
+                return True
+            else:
+                return False
+        return False
+    
+    async def switch_user_role(self, telegram_id: int) -> None:
+        user = await self.get_by_telegram_id(telegram_id)
+        if user:
+            is_admin = self.is_admin(telegram_id)
+            if is_admin:
+                user.is_admin = False
+            else:
+                user.is_admin = True
+        
     async def get_or_create(
         self, telegram_id: int, first_name: str, username: Optional[str] = None
     ) -> User:
