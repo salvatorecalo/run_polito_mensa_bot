@@ -13,7 +13,8 @@ from .handlers import \
         set_language, \
         refresh_menu, \
         set_user_image_or_text_option,\
-        get_user_image_or_text_option
+        get_user_image_or_text_option, \
+        switch_user_role
 from .scheduler import BotScheduler
 
 __all__ = [
@@ -28,5 +29,6 @@ __all__ = [
     "set_language",
     "refresh_menu",
     "set_user_image_or_text_option",
-    "get_user_image_or_text_option"
+    "get_user_image_or_text_option",
+    "switch_user_role"
 ]
