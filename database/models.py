@@ -89,6 +89,7 @@ class User(SQLModel, table=True):
         default_factory=list,
         sa_column=Column(JSON)
     )
+    is_admin: bool = Field(default=False)
     is_active: bool = Field(default=True)
     language: str = Field(default="en", max_length=5)  # "en" or "it"
     image_or_text: str = Field(default="image")
