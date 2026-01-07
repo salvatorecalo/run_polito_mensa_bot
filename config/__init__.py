@@ -5,13 +5,8 @@ from .settings import *
 from .constants import *
 
 __all__ = [
-    'IG_USERNAME',
-    'IG_PASSWORD',
-    'TARGET_USER',
     'TELEGRAM_TOKEN',
     'TELEGRAM_CHAT_ID',
-    'SESSION_FILE',
-    'SUBSCRIBERS_FILE',
     'DOWNLOAD_DIR',
     'CREATED_IMAGES_DIR',
     'MAX_RETRIES',

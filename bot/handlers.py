@@ -200,247 +200,6 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
 
 @inject_db
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
-    if not session or not update.callback_query: return
-    query = update.callback_query
-    await query.answer()
-    
-    data = query.data
-    if not data: return
-
-    user_id = query.from_user.id
-    user_repo = UserRepository(session)
-    user = await user_repo.get_by_telegram_id(user_id)
-    if not user: return
-
-    if data == "menu":
-        await menu_command(update, context)
-    elif data == "subscribe_canteen":
-        await show_canteen_buttons(update, context)
-    elif data.startswith("toggle_canteen_"):
-        c_id = data.split("_")[-1]
-        if c_id.isdigit():
-            await handle_canteen_toggle(update, context, canteen_id=int(c_id))
-    elif data == "set_language":
-        await show_language_buttons(update, context)
-    elif data.startswith("lang_"):
-        await handle_language_change(update, context, new_lang=data.split("_")[-1])
-    elif data == "get_format":
-        await get_user_image_or_text_option(update, context)
-    elif data.startswith("set_format_"):
-        user.image_or_text = data.split("_")[-1]
-        await query.edit_message_text(f"✅ Formato impostato su: {user.image_or_text}")
-        await asyncio.sleep(1)
-        await start_command(update, context)
-    elif data == "cancel":
-        await user_repo.update_status(user_id, is_active=False)
-        await query.edit_message_text("👋 Ti sei disiscritto correttamente. Invia /start per tornare.")
-    elif data == "start_back":
-        await start_command(update, context)
-
-# --- UI Builders (Sub-menus) ---
-
-"""
-Telegram Bot Handlers with Dependency Injection and Async Database Support
-Uniformato per l'utilizzo esclusivo di bottoni e gestione robusta dei None
-"""
-import html
-import os
-import re
-import asyncio
-from datetime import date, datetime
-from functools import wraps
-from typing import Any, Callable
-
-from googletrans import Translator
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
-from telegram.error import BadRequest
-
-from utils.logger import setup_logger
-from utils.image_processing import create_long_image
-from database.connection import get_session_maker
-from database.repositories import CanteenRepository, MenuRepository, UserRepository
-from database.models import Canteen
-from config.settings import CREATED_IMAGES_DIR 
-
-# Setup logger
-logger = setup_logger(__name__)
-translator = Translator()
-
-# --- Dependency Injection Decorator ---
-
-def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
-    @wraps(func)
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        if 'session' in kwargs:
-            return await func(update, context, *args, **kwargs)
-            
-        session_maker = get_session_maker()
-        if not session_maker:
-            logger.error("Session maker non inizializzato")
-            return
-            
-        session = session_maker()
-        try:
-            result = await func(update, context, session=session, *args, **kwargs)
-            await session.commit()
-            return result
-        except Exception as e:
-            logger.error(f"❌ Database error in handler {func.__name__}: {e}", exc_info=True)
-            await session.rollback()
-            
-            msg = update.effective_message or (update.callback_query.message if update.callback_query else None)
-            if msg:
-                await msg.reply_text("⚠️ Si è verificato un errore interno. Riprova più tardi.")
-        finally:
-            await session.close()
-    return wrapper
-
-# --- Helper Functions ---
-
-async def translate_text(text: str, dest_language: str) -> str:
-    try:
-        if not text or not dest_language or dest_language == "it":
-            return text
-        
-        # Preserva i comandi durante la traduzione
-        command_pattern = r'(/[a-zA-Z_]+)'
-        commands = re.findall(command_pattern, text)
-        text_with_placeholders = text
-        placeholders = {}
-        for i, command in enumerate(commands):
-            placeholder = f"__CMD{i}__"
-            placeholders[placeholder] = command
-            text_with_placeholders = text_with_placeholders.replace(command, placeholder, 1)
-            
-        result = await translator.translate(text_with_placeholders, dest=dest_language, src='it')
-        if not result: return text
-        
-        translated_text = result.text
-        for placeholder, command in placeholders.items():
-            translated_text = translated_text.replace(placeholder, command)
-        return translated_text
-    except Exception as e:
-        logger.error(f"Translation error: {e}")
-        return text
-
-# --- Core Logic Handlers (Standard Commands) ---
-
-@inject_db
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None) -> None:
-    if not session or not update.effective_user: return
-    
-    user_repo = UserRepository(session)
-    user = await user_repo.get_or_create(
-        telegram_id=update.effective_user.id, 
-        first_name=update.effective_user.first_name, 
-        username=update.effective_user.username
-    )
-    
-    if not user: return
-
-    # Riattiva se era disattivato
-    if not user.is_active:
-        await user_repo.update_status(user.telegram_id, is_active=True)
-
-    language = user.language
-    text = f"👋 Ciao {user.first_name}! Benvenuto nel bot della mensa del PoliTo.\n\nUsa i pulsanti qui sotto per gestire il tuo profilo e vedere il menu."
-    
-    keyboard = [
-        [InlineKeyboardButton("🍽️ MENU DI OGGI", callback_data="menu")],
-        [InlineKeyboardButton("📍 GESTISCI MENSE", callback_data="subscribe_canteen")],
-        [InlineKeyboardButton("🌍 LINGUA", callback_data="set_language"), InlineKeyboardButton("🖼️ FORMATO", callback_data="get_format")],
-        [InlineKeyboardButton("❌ DISISCRIVITI", callback_data="cancel")],
-    ]
-    
-    translated = await translate_text(text, language)
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    if update.callback_query:
-        await update.callback_query.edit_message_text(translated, reply_markup=reply_markup, parse_mode="HTML")
-    elif update.effective_message:
-        await update.effective_message.reply_text(translated, reply_markup=reply_markup, parse_mode="HTML")
-
-@inject_db
-async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None) -> None:
-    if not session or not update.effective_user or not context: return
-    
-    # Recuperiamo l'ID della chat in modo sicuro
-    chat_id = update.effective_chat.id if update.effective_chat else None
-    if not chat_id: return
-
-    user_repo = UserRepository(session)
-    user = await user_repo.get_by_telegram_id(update.effective_user.id)
-    
-    language = user.language if user else "it"
-    
-    # CONTROLLO MENSE - VERSIONE CORRETTA
-    if not user or not user.selected_canteen_ids:
-        query = update.callback_query
-        if not query:
-            return
-
-        text = "⚠️ Non sei iscritto a nessuna mensa.\nSeleziona almeno una mensa per continuare."
-        translated = await translate_text(text, language)
-
-        keyboard = [
-            [InlineKeyboardButton("📍 GESTISCI MENSE", callback_data="subscribe_canteen")],
-            [InlineKeyboardButton("🔙 MENU PRINCIPALE", callback_data="start_back")]
-        ]
-
-        try:
-            await query.edit_message_text(
-                translated,
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        except BadRequest as e:
-            if "Message is not modified" not in str(e):
-                raise
-
-        return
-
-    # RESTO DELLA LOGICA MENU
-    today = date.today()
-    meal_type = "lunch" if datetime.now().hour < 15 else "dinner"
-    
-    menu_repo = MenuRepository(session)
-    canteen_repo = CanteenRepository(session)
-    menus = await menu_repo.get_menus_by_date_for_canteens(today, user.selected_canteen_ids, meal_type)
-    
-    if not menus:
-        text = f"📅 Nessun menu disponibile per il {today.strftime('%d/%m')} ({meal_type})."
-        translated = await translate_text(text, language)
-        await context.bot.send_message(chat_id=chat_id, text=translated)
-        return
-
-    response_text = f"🍽️ <b>Menu {today.strftime('%d/%m')} ({meal_type})</b>\n\n"
-    for menu in menus:
-        canteen = await canteen_repo.get_by_id(menu.canteen_id)
-        if canteen:
-            response_text += f"📍 <b>{html.escape(canteen.name)}</b>\n"
-            menu_content = menu.original_text or "Menu vuoto"
-            if language != "it":
-                try:
-                    trans = await translator.translate(menu_content, src="it", dest=language)
-                    if trans: menu_content = trans.text
-                except: pass
-            response_text += f"{html.escape(menu_content)}\n\n"
-
-    if user.image_or_text == "text":
-        await context.bot.send_message(chat_id=chat_id, text=response_text, parse_mode='HTML')
-    else:
-        os.makedirs(CREATED_IMAGES_DIR, exist_ok=True)
-        img_path = os.path.join(CREATED_IMAGES_DIR, f"menu_{user.telegram_id}.jpg")
-        clean_text = re.sub(r'<[^>]+>', '', response_text)
-        created_path = create_long_image(text=clean_text, output_path=img_path)
-        if created_path:
-            with open(created_path, 'rb') as photo:
-                await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=f"🍽️ Menu {today.strftime('%d/%m')}")
-
-# --- Callback Router ---
-
-@inject_db
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
     logger.info(f"🔵 handle_callback chiamato - session: {session is not None}")
     
     if not session or not update.callback_query: 
@@ -662,31 +421,47 @@ async def get_user_image_or_text_option_cmd(update: Update, context: ContextType
 
 @inject_db
 async def refresh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
-    """Forza l'aggiornamento dei menu (Solo Admin)"""
-    
-    if not session:
+    if not session or not update.effective_user or not update.effective_message:
         return
+
     user_repo = UserRepository(session)
-    if not update.effective_user or not user_repo.is_admin(update.effective_user.id) or not update.effective_message:
+    # CORRETTO: await perché dobbiamo verificare se è admin
+    if not await user_repo.is_admin(update.effective_user.id):
+        await update.effective_message.reply_text("❌ Comando riservato agli admin.")
         return
-    
-    status_msg = await update.effective_message.reply_text("🔄 Avvio aggiornamento menu...\nQuesta operazione potrebbe richiedere qualche minuto.")
-    
-    try:
-        from services.scraper_service import fetch_and_store_menus
-        await fetch_and_store_menus()
-        await status_msg.edit_text("✅ Menu aggiornati con successo!\nUsa /menu per visualizzare i nuovi dati.")
-    except Exception as e:
-        logger.error(f"❌ Error during menu refresh: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ Errore durante l'aggiornamento: {str(e)}")
+
+    # Risposta immediata a Telegram
+    status_msg = await update.effective_message.reply_text(
+        "🔄 Avvio aggiornamento menu...\nQuesta operazione potrebbe richiedere qualche minuto."
+    )
+
+    # Task lungo in background
+    async def run_scraper():
+        from database.connection import get_session_maker
+        session_maker = get_session_maker()
+        session_inner = session_maker()
+        try:
+            from services.scraper_service import fetch_and_store_menus
+            await fetch_and_store_menus()
+            await status_msg.edit_text(
+                "✅ Menu aggiornati con successo!\nUsa /menu per visualizzare i nuovi dati."
+            )
+        except Exception as e:
+            logger.error(f"❌ Error during menu refresh: {e}", exc_info=True)
+            await status_msg.edit_text(f"❌ Errore durante l'aggiornamento: {str(e)}")
+        finally:
+            await session_inner.close()
+    asyncio.create_task(run_scraper())
 
 @inject_db
 async def add_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
     """Aggiunge una mensa al DB (Solo Admin). Formato: /add_canteen Nome | Indirizzo"""
-    if not session:
+    if not session or not update.effective_user or not update.effective_message:
         return
+
     user_repo = UserRepository(session)
-    if not session or not update.effective_user or not user_repo.is_admin(update.effective_user.id) or not update.effective_message:
+    if not await user_repo.is_admin(update.effective_user.id):
+        await update.effective_message.reply_text("❌ Comando riservato agli admin.")
         return
 
     if not context.args:
@@ -714,10 +489,12 @@ async def add_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, sessio
 @inject_db
 async def delete_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
     """Rimuove una mensa dal DB (Solo Admin). Formato: /delete_canteen Nome"""
-    if not session:
+    if not session or not update.effective_user or not update.effective_message:
         return
+
     user_repo = UserRepository(session)
-    if not session or not update.effective_user or not user_repo.is_admin(update.effective_user.id) or not update.effective_message:
+    if not await user_repo.is_admin(update.effective_user.id):
+        await update.effective_message.reply_text("❌ Comando riservato agli admin.")
         return
 
     if not context.args:
@@ -737,37 +514,37 @@ async def delete_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, ses
         await update.effective_message.reply_text(f"✅ Mensa '{name}' eliminata.")
     except Exception as e:
         await update.effective_message.reply_text(f"❌ Errore: {str(e)}")
-        
+
 @inject_db
 async def switch_user_role(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
-    if not session:
-        logger.warning("Nessuna sessione in add_admin")
+    if not session or not update or not update.effective_user or not update.effective_message:
         return
-    if not update or not update.effective_user or not update.effective_message:
-        return
+
     user_repo = UserRepository(session)
-    if not user_repo.is_admin(update.effective_user.id):
+    if not await user_repo.is_admin(update.effective_user.id):
         await update.effective_message.reply_text(
-            "Comando add_admin non effetuato da un admin bocciato"
+            "❌ Comando riservato agli admin."
         )
         return
+
     if not context.args:
         await update.effective_message.reply_text(
-            "Sintassi errata: si prega di usare il comando con /add_admin [USER_ID]\nDove [USER_ID] è l'id dell'utente che vuoi rendere admin"
+            "Sintassi errata: usa /add_admin [USER_ID]\nDove [USER_ID] è l'id dell'utente da rendere admin"
         )
         return
     
     new_admin_id = context.args[0]
     try:
-        user = await user_repo.get_by_telegram_id(int(new_admin_id))
-        if user:
+        user = await user_repo.get_by_telegram_id((int(new_admin_id)))
+        if not user:
             await update.effective_message.reply_text(
-                f"✅ Utente {user.first_name} trovato e aggiornato"
+                f"✅ Utente non trovato"
             )
-        else:
-            await update.effective_message.reply_text(
-                "Utente non trovato nel db"
-            )
+            return
+        await user_repo.switch_user_role(int(new_admin_id))
+        await update.effective_message.reply_text(
+            f"✅ Utente {user.first_name} trovato e aggiornato"
+        )
     except Exception as message:
         await update.effective_message.reply_text(
             repr(message)

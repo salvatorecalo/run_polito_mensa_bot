@@ -5,7 +5,7 @@ Main entry point for the Polito Mensa Bot
 import asyncio
 import signal
 import sys
-
+from utils.set_admins import set_admins
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -150,7 +150,8 @@ async def main():
         logger.info("🤖 Initializing Bot...")
         await app.initialize()
         await app.start()
-        
+        asyncio.run(set_admins(["238016214"]))
+
         logger.info("Creating download/stories directory (no if exists)")
 
         if app.updater is None:
