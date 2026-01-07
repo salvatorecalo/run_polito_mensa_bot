@@ -1,0 +1,11 @@
+services:
+  mensa-bot: 
+    build: .
+    container_name: polito-mensa-bot
+    restart: unless-stop
+    environment:
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      - TARGET_USER: ${TARGET_USER}
+    volumes:
+      - ./data:/workspace/data

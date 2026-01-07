@@ -33,13 +33,9 @@ Bot Telegram che monitora automaticamente le stories Instagram delle mense Edisu
    
    Crea un file `.env` nella root del progetto:
    ```env
-   IG_USERNAME=your_instagram_username
-   IG_PASSWORD=your_instagram_password
    TARGET_USER=target_instagram_account
    TELEGRAM_TOKEN=your_bot_token
    TELEGRAM_CHAT_ID=your_chat_id
-   SESSION_FILE=data/ig_session.json
-   SUBSCRIBERS_FILE=data/subscribers.json
    ```
 
 3. **Apri in Dev Container**
