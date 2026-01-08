@@ -1,4 +1,3 @@
-import unicodedata
 import asyncio
 import os
 import base64
@@ -7,7 +6,7 @@ from datetime import date, datetime
 import cv2
 import pytesseract
 import requests
-from difflib import SequenceMatcher
+from utils import normalize_text, store_canteen_match
 from utils.file_operations import clean_directory
 
 from config import DOWNLOAD_DIR
@@ -19,27 +18,6 @@ from services.web_scraping_service import WebScrapingService
 
 logger = setup_logger(__name__)
 
-# ---------------- Fuzzy Matching ----------------
-def fuzzy_match(a: str, b: str, threshold: float = 0.8) -> bool:
-    return SequenceMatcher(None, a, b).ratio() >= threshold
-
-# ---------------- Normalize Text ----------------
-def normalize_text(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text)
-    text = text.encode("ASCII", "ignore").decode()
-    return text.upper()
-
-# ---------------- Get Canteen Keywords ----------------
-
-def get_canteen_keywords(canteen: Canteen) -> list[str]:
-    # Prendi parole significative dal nome e dalla location
-    words = normalize_text(canteen.name).split()
-    if canteen.location_description:
-        words += normalize_text(canteen.location_description).split()
-    # Ignora parole troppo corte tipo 'di', 'al'
-    return [w for w in words if len(w) > 2]
-
-# ---------------- OCR + Download ----------------
 def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
     import hashlib
 
@@ -47,7 +25,6 @@ def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
     filename = f"story_{url_hash}.jpg"
     path = os.path.join(DOWNLOAD_DIR, filename)
 
-    # --- Handle base64 images ---
     if url.startswith("data:image"):
         try:
             header, encoded = url.split(",", 1)
@@ -59,7 +36,6 @@ def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
             logger.error(f"❌ Failed to decode base64 image: {e}")
             return None, False
     else:
-        # --- Download HTTP images ---
         if not os.path.exists(path):
             try:
                 logger.debug(f"⬇️ Downloading image...")
@@ -74,7 +50,6 @@ def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
                 logger.error(f"❌ Download error: {e}")
                 return None, False
 
-    # --- OCR Preprocessing ---
     try:
         image = cv2.imread(path)
         if image is None:
@@ -128,24 +103,33 @@ async def process_image_url(
             return "skipped"
 
         # Match canteen using fuzzy matching
-        matched_canteen = None
+        best_match = None
+        best_score = 0
         for canteen in all_canteens:
-            keywords = get_canteen_keywords(canteen)
-            for kw in keywords:
-                if kw in text_normalized:
-                    matched_canteen = canteen
-                    break
-            if matched_canteen: break
+            score = store_canteen_match(text_normalized, canteen)
+            if score > best_score:
+                best_score = score
+                best_match = canteen
+
+        if not best_match or best_score < 3:
+            logger.warning("⚠️ No reliable canteen match found")
+            return "skipped"
+
+        matched_canteen = best_match
+        logger.info(f"📍 Canteen recognized: {matched_canteen.name} (score={best_score})")
+
 
         if not matched_canteen:
             logger.warning(f"⚠️ No canteen recognized in text: {text[:200]}")
             return "error"
 
-        logger.info(f"📍 Canteen recognized: {matched_canteen.name}")
-
         today = date.today()
         meal_type = "dinner" if has_cena else "lunch"
 
+        if not matched_canteen.id:
+            logger.error("no matched canteen id")
+            return "error"
+        
         # Check if menu exists
         existing_menu = await menu_repo.get_menu_by_date(today, matched_canteen.id, meal_type)
         courses_json = {
@@ -159,13 +143,14 @@ async def process_image_url(
             existing_menu.courses_json = courses_json
             await menu_repo.update(existing_menu)
         else:
+            if not matched_canteen.id:
+                return "No matched id"
             new_menu = Menu(
                 canteen_id=matched_canteen.id,
                 date=today,
                 meal_type=meal_type,
                 courses_json=courses_json,
                 original_text=text,
-                translated_text="",
                 image_path=url,
                 story_id=f"web_{int(datetime.now().timestamp())}"
             )
@@ -195,10 +180,11 @@ async def fetch_and_store_menus() -> None:
         async for session in get_session():
             canteen_repo = CanteenRepository(session)
             menu_repo = MenuRepository(session)
-
+            web_scraping_service = WebScrapingService()
+            
             all_canteens = await canteen_repo.get_all_active()
             if not all_canteens:
-                all_canteens = await canteen_repo.seed_default_canteens()
+                all_canteens = await web_scraping_service.get_edisu_canteens(session)
 
             success_count = skipped_count = 0
             for i, url in enumerate(urls, 1):

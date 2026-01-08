@@ -122,7 +122,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sess
 
 @inject_db
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None) -> None:
-    if not session or not update.effective_user or not context: return
+    if not session or not update.effective_user or not context or not update.effective_message: return
     
     # Recuperiamo l'ID della chat in modo sicuro
     chat_id = update.effective_chat.id if update.effective_chat else None
@@ -135,9 +135,6 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
     
     # CONTROLLO MENSE - VERSIONE CORRETTA
     if not user or not user.selected_canteen_ids:
-        query = update.callback_query
-        if not query:
-            return
 
         text = "⚠️ Non sei iscritto a nessuna mensa.\nSeleziona almeno una mensa per continuare."
         translated = await translate_text(text, language)
@@ -148,7 +145,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
         ]
 
         try:
-            await query.edit_message_text(
+            await update.effective_message.reply_text(
                 translated,
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
@@ -159,6 +156,8 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
         return
 
     # RESTO DELLA LOGICA MENU
+    logger.info(f"User selected canteens: {user.selected_canteen_ids}")
+
     today = date.today()
     meal_type = "lunch" if datetime.now().hour < 15 else "dinner"
     
