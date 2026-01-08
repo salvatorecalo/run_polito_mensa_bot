@@ -188,13 +188,42 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
         await context.bot.send_message(chat_id=chat_id, text=response_text, parse_mode='HTML')
     else:
         os.makedirs(CREATED_IMAGES_DIR, exist_ok=True)
-        img_path = os.path.join(CREATED_IMAGES_DIR, f"menu_{user.telegram_id}.jpg")
-        clean_text = re.sub(r'<[^>]+>', '', response_text)
-        clean_text = html.unescape(clean_text)
-        created_path = create_long_image(text=clean_text, output_path=img_path)
-        if created_path:
-            with open(created_path, 'rb') as photo:
-                await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=f"🍽️ Menu {today.strftime('%d/%m')}")
+
+        for menu in menus:
+            canteen = await canteen_repo.get_by_id(menu.canteen_id)
+            if not canteen:
+                continue
+
+            menu_text = f"{canteen.name}\n\n{menu.original_text or 'Menu non disponibile'}"
+
+            if language != "it":
+                try:
+                    trans = await translator.translate(menu_text, src="it", dest=language)
+                    if trans:
+                        menu_text = trans.text
+                except:
+                    pass
+
+            clean_text = html.unescape(re.sub(r'<[^>]+>', '', menu_text))
+
+            img_path = os.path.join(
+                CREATED_IMAGES_DIR,
+                f"menu_{user.telegram_id}_{canteen.id}.jpg"
+            )
+
+            created_path = create_long_image(
+                text=clean_text,
+                output_path=img_path,
+                logo_text="POLITO MENSA"
+            )
+
+            if created_path:
+                with open(created_path, 'rb') as photo:
+                    await context.bot.send_photo(
+                        chat_id=chat_id,
+                        photo=photo,
+                        caption=f"🍽️ {canteen.name}"
+                    )
 
 # --- Callback Router ---
 
