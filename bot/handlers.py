@@ -191,6 +191,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
         os.makedirs(CREATED_IMAGES_DIR, exist_ok=True)
         img_path = os.path.join(CREATED_IMAGES_DIR, f"menu_{user.telegram_id}.jpg")
         clean_text = re.sub(r'<[^>]+>', '', response_text)
+        clean_text = html.unescape(clean_text)
         created_path = create_long_image(text=clean_text, output_path=img_path)
         if created_path:
             with open(created_path, 'rb') as photo:
