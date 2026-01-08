@@ -211,10 +211,3 @@ async def fetch_and_store_menus() -> None:
 
     except Exception as e:
         logger.error(f"❌ Failed to fetch stories: {e}", exc_info=True)
-
-# ---------------- Entry Point ----------------
-if __name__ == "__main__":
-    try:
-        asyncio.run(fetch_and_store_menus())
-    except KeyboardInterrupt:
-        logger.info("🛑 Stopped by user")
