@@ -2,13 +2,14 @@
 Notification Service: Sends menus from Database to Telegram Subscribers
 """
 
-from datetime import date, datetime
+from datetime import datetime
 from utils.logger import setup_logger
 # Ensure correct imports based on previous files
 from database.connection import get_session
 from database.models import Menu
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from services.telegram_service import TelegramService
+from utils.today import today
 
 logger = setup_logger(__name__)
 
@@ -27,7 +28,6 @@ class NotificationService:
         # Determine meal type (Lunch < 15:00 <= Dinner)
         current_hour = datetime.now().hour
         meal_type = "lunch" if current_hour < 15 else "dinner"
-        today = date.today()
 
         async for session in get_session():
             user_repo = UserRepository(session)
