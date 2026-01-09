@@ -6,10 +6,11 @@ import html
 import os
 import re
 import asyncio
-from datetime import date, datetime
+from datetime import datetime
 from functools import wraps
 from typing import Any, Callable
-
+from services.scraper_service import fetch_and_store_menus
+from utils import today
 from googletrans import Translator
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -19,7 +20,7 @@ from utils.logger import setup_logger
 from utils.image_processing import create_long_image
 from database.connection import get_session_maker
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
-from database.models import Canteen
+from database.models import Canteen, Menu
 from config.settings import CREATED_IMAGES_DIR 
 
 # Setup logger
@@ -33,7 +34,9 @@ def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         if 'session' in kwargs:
             return await func(update, context, *args, **kwargs)
-            
+        if not update.effective_message:
+            logger.error("Update.effective message was not found")
+            return
         session_maker = get_session_maker()
         if not session_maker:
             logger.error("Session maker non inizializzato")
@@ -121,6 +124,39 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sess
         await update.effective_message.reply_text(translated, reply_markup=reply_markup, parse_mode="HTML")
 
 @inject_db
+async def debug_menus(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
+    """Debug: mostra tutti i menu nel DB"""
+    if not session or not update.effective_message:
+        return
+    
+    from datetime import date
+    menu_repo = MenuRepository(session)
+    canteen_repo = CanteenRepository(session)
+    
+    today = date.today()
+    
+    # Prendi TUTTI i menu di oggi
+    from sqlalchemy import select
+    stmt = select(Menu).where(Menu.date == today)
+    result = await session.execute(stmt)
+    all_menus = result.scalars().all()
+    
+    msg = f"🔍 DEBUG - Menu salvati per {today}:\n\n"
+    
+    if not all_menus:
+        msg += "❌ Nessun menu trovato nel database!\n"
+    else:
+        for menu in all_menus:
+            canteen = await canteen_repo.get_by_id(menu.canteen_id)
+            msg += f"📍 {canteen.name if canteen else 'Unknown'}\n"
+            msg += f"   ID Mensa: {menu.canteen_id}\n"
+            msg += f"   Tipo: {menu.meal_type}\n"
+            msg += f"   Data: {menu.date}\n"
+            msg += f"   Testo: {menu.original_text[:100]}...\n\n"
+    
+    await update.effective_message.reply_text(msg)
+    
+@inject_db
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None) -> None:
     if not session or not update.effective_user or not context or not update.effective_message: return
     
@@ -158,7 +194,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
     # RESTO DELLA LOGICA MENU
     logger.info(f"User selected canteens: {user.selected_canteen_ids}")
 
-    today = date.today()
+    
     meal_type = "lunch" if datetime.now().hour < 15 else "dinner"
     
     menu_repo = MenuRepository(session)
@@ -166,7 +202,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
     menus = await menu_repo.get_menus_by_date_for_canteens(today, user.selected_canteen_ids, meal_type)
     
     if not menus:
-        text = f"📅 Nessun menu disponibile per il {today.strftime('%d/%m')} ({meal_type})."
+        text = f"📅 Nessun menu disponibile per il {today.strftime('%d/%m')} ({meal_type}). Aspetta le 11:45 o le 20:00 di sera per riprovare."
         translated = await translate_text(text, language)
         await context.bot.send_message(chat_id=chat_id, text=translated)
         return
@@ -452,7 +488,7 @@ async def get_user_image_or_text_option_cmd(update: Update, context: ContextType
 async def refresh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
     if not session or not update.effective_user or not update.effective_message:
         return
-
+    
     user_repo = UserRepository(session)
     # CORRETTO: await perché dobbiamo verificare se è admin
     if not await user_repo.is_admin(update.effective_user.id):
@@ -470,7 +506,6 @@ async def refresh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
         session_maker = get_session_maker()
         session_inner = session_maker()
         try:
-            from services.scraper_service import fetch_and_store_menus
             await fetch_and_store_menus()
             await status_msg.edit_text(
                 "✅ Menu aggiornati con successo!\nUsa /menu per visualizzare i nuovi dati."

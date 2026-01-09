@@ -53,11 +53,22 @@ class WebScrapingService:
                 
                 # Sul loro sito hanno un div con la classe profile-stories-item che wrappa le img interessate
                 media_elements = await page.locator(".profile-stories-item > img").all()
-                logger.warning(f"TROVATI QUESTI ELEMENTI {media_elements}")
-                for elm in media_elements:
-                    src = await elm.get_attribute("src")
-                    stories_urls.append(src)
-                logger.info(f"✅ Trovati {len(stories_urls)} potenziali URL storie.")
+                logger.info(f"TROVATI QUESTI ELEMENTI {media_elements}")
+                
+                for i,elm in enumerate(media_elements):
+                    url = (
+                        await elm.get_attribute("data-src") or
+                        await elm.get_attribute("data-lazy-src") or
+                        await elm.get_attribute("data-original") or
+                        await elm.get_attribute("src")
+                    )
+                    
+                    if url and not url.startswith("data:image"):
+                        logger.debug(f"  [{i+1}] URL trovato: {url[:80]}")
+                        stories_urls.append(url)
+                    else:
+                        logger.warning(f"  [{i+1}] Nessun URL valido (url={url[:50] if url else 'None'})")
+                logger.info(f"✅ Estratti {len(stories_urls)} URL da {len(media_elements)} elementi")
             except Exception as e:
                 logger.error(f"Errore durante lo scraping: {e}")
                 await page.screenshot(path="data/debug_error.png")
