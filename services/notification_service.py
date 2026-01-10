@@ -9,7 +9,7 @@ from database.connection import get_session
 from database.models import Menu
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from services.telegram_service import TelegramService
-from utils.today import today
+from utils.today import TODAY_DATE
 
 logger = setup_logger(__name__)
 
@@ -56,7 +56,7 @@ class NotificationService:
             # 4. Process each canteen
             for canteen_id, canteen_users in users_by_canteen.items():
                 # Fetch menu for this canteen
-                menu = await menu_repo.get_menu_by_date(today, canteen_id, meal_type)
+                menu = await menu_repo.get_menu_by_date(TODAY_DATE, canteen_id, meal_type)
 
                 if not menu:
                     logger.info(f"ℹ️ No {meal_type} menu found for canteen {canteen_id}")
