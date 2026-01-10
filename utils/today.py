@@ -1,4 +1,4 @@
 from zoneinfo import ZoneInfo
-from datetime import datetime
+from datetime import datetime, date
 
-today = datetime.now(ZoneInfo("Europe/Rome")).date()
+TODAY_DATE: date = datetime.now(ZoneInfo("Europe/Rome")).date()

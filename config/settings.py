@@ -18,3 +18,5 @@ CREATED_IMAGES_DIR = "download/created_images"
 
 # Retry
 MAX_RETRIES = 3
+
+has_canteens_been_modified = False

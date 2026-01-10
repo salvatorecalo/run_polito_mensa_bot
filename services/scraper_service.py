@@ -8,7 +8,7 @@ import pytesseract
 import requests
 from utils import normalize_text, store_canteen_match
 from utils.file_operations import clean_directory
-from utils import today
+from utils import TODAY_DATE
 from config import DOWNLOAD_DIR, CREATED_IMAGES_DIR
 from database.connection import create_db_and_tables, get_session, init_db
 from database.models import Canteen, Menu
@@ -166,7 +166,7 @@ async def process_image_url(
 
         # Check if menu already exists
         existing_menu = await menu_repo.get_menu_by_date(
-            today, 
+            TODAY_DATE, 
             matched_canteen.id, 
             meal_type
         )
@@ -183,7 +183,7 @@ async def process_image_url(
             logger.info(f"➕ Creating new menu for {matched_canteen.name}")
             new_menu = Menu(
                 canteen_id=matched_canteen.id,
-                date=today,
+                date=TODAY_DATE,
                 meal_type=meal_type,
                 courses_json=courses_json,
                 original_text=text,
@@ -231,17 +231,10 @@ async def fetch_and_store_menus() -> None:
         async for session in get_session():
             canteen_repo = CanteenRepository(session)
             menu_repo = MenuRepository(session)
-            web_scraping_service = WebScrapingService()
             
             # Get all active canteens
             all_canteens = await canteen_repo.get_all_active()
             
-            # If no canteens exist, scrape them from official site
-            if not all_canteens:
-                logger.info("📍 No canteens found, fetching from EDISU website...")
-                all_canteens = await web_scraping_service.get_edisu_canteens(session)
-                logger.info(f"✅ Loaded {len(all_canteens)} canteens from website")
-
             if not all_canteens:
                 logger.error("❌ No canteens available, cannot process menus")
                 return

@@ -5,7 +5,7 @@ Main entry point for the Polito Mensa Bot
 import asyncio
 import signal
 import sys
-from services.web_scraping_service import WebScrapingService
+from utils.read_canteens_from_file import read_canteens_from_file
 from utils.set_admins import set_admins
 from telegram import Update
 from telegram.ext import (
@@ -20,9 +20,9 @@ from telegram.ext import (
 
 from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_canteen, delete_canteen, unsubscribe_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option, handle_callback, switch_user_role, debug_menus
 from bot.scheduler import BotScheduler
-from config import TELEGRAM_TOKEN
+from config import TELEGRAM_TOKEN, has_canteens_been_modified
 from database.connection import close_db, create_db_and_tables, get_session, init_db
-from database.repositories import UserRepository
+from database.repositories import CanteenRepository, UserRepository
 from services.notification_service import NotificationService
 from services.scraper_service import fetch_and_store_menus
 from utils.logger import setup_logger
@@ -124,8 +124,7 @@ async def main():
 
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
         async for session in get_session():
-            canteens_service = WebScrapingService()
-            await canteens_service.get_edisu_canteens(session)
+            await read_canteens_from_file(session)
         # Register Handlers
         app.add_handler(CallbackQueryHandler(handle_callback))
         app.add_handler(CommandHandler("start", start_command))
@@ -184,9 +183,8 @@ async def main():
             await stop_signal
         except asyncio.CancelledError:
             pass
-
+        
         logger.info("🛑 Stopping Bot...")
-
         # 6. Manual Stop Lifecycle
         if app.updater.running:
             await app.updater.stop()
