@@ -19,10 +19,10 @@ def add_watermark(
     image: Image.Image,
     watermark_text: Optional[str] = None,
     watermark_image_path: Optional[str] = None,
-    position: str = "bottom-right",
+    position: str = "top-left",
     font_size: int = 24,
-    opacity: int = 180,
-    logo_size: Tuple[int, int] = (120, 120)
+    opacity: int = 255,
+    logo_size: Tuple[int, int] = (150, 150)
 ) -> Image.Image:
     """
     Aggiunge un watermark/logo all'immagine (può essere testo o immagine).
@@ -170,7 +170,7 @@ def create_long_image(
     add_logo: bool = True,
     logo_text: Optional[str] = None,
     logo_image_path: Optional[str] = None,
-    logo_position: str = "bottom-right"
+    logo_position: str = "top-right"
 ) -> str:
     """
     Crea un'immagine verticale con testo centrato, adattando automaticamente

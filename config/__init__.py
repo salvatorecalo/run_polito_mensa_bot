@@ -18,6 +18,5 @@ __all__ = [
     'BG_COLOR',
     'TEXT_COLOR',
     'TELEGRAM_BATCH_SIZE',
-    'RETRY_DELAY',
     'SCHEDULE_TIMES',
 ]

@@ -245,7 +245,9 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
             created_path = create_long_image(
                 text=clean_text,
                 output_path=img_path,
-                logo_text="@RunMensaBot on telegram"
+                logo_text="@RunMensaBot on telegram",
+                add_logo=True,
+                logo_image_path="assets/run_logo.png"
             )
 
             if created_path:
