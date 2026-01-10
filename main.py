@@ -105,7 +105,7 @@ async def main():
     global scheduler, app
 
     logger.info("🚀 Starting Polito Mensa Bot...")
-
+    loop = asyncio.get_running_loop()
     try:
         # 1. Initialize Database
         await init_db()
@@ -114,8 +114,8 @@ async def main():
         # 2. Setup Scheduler
         scheduler = BotScheduler()
         # Schedule task for 11:25 and 20:00 (approx)
-        scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 11, 45)
-        scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 20, 0)
+        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 11, 45)
+        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 20, 0)
         scheduler.start()
 
         # 3. Setup Telegram Bot
@@ -151,7 +151,7 @@ async def main():
         logger.info("🤖 Initializing Bot...")
         await app.initialize()
         await app.start()
-        await set_admins(["238016214"])
+        await set_admins(["238016214", "6638746092"]) # set the run user to admin every time the bot start so he can add or remove admins
 
         logger.info("Creating download/stories directory (no if exists)")
 
@@ -166,8 +166,6 @@ async def main():
         def handle_signal():
             if not stop_signal.done():
                 stop_signal.set_result(None)
-
-        loop = asyncio.get_running_loop()
 
         # Cross-platform signal handling
         if sys.platform != "win32":

@@ -7,7 +7,7 @@ IMAGE_WIDTH = 1080
 IMAGE_HEIGHT = 1920
 MIN_FONT_SIZE = 40
 MAX_FONT_SIZE = 80
-IMAGE_MARGIN = 60  # Margine dai bordi
+IMAGE_MARGIN = 120  # Margine dai bordi
 
 # Colori (RGB)
 BG_COLOR = (255, 140, 0)  # Arancione
