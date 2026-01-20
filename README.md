@@ -36,6 +36,7 @@ Bot Telegram che monitora automaticamente le stories Instagram delle mense Edisu
    TARGET_USER=target_instagram_account
    TELEGRAM_TOKEN=your_bot_token
    TELEGRAM_CHAT_ID=your_chat_id
+   GOOGLE_API_KEY=your google api key
    ```
 
 3. **Apri in Dev Container**
@@ -94,7 +95,7 @@ run_polito_mensa_bot/
 - **instagrapi** - API Instagram
 - **Tesseract OCR** - Estrazione testo dalle immagini
 - **googletrans** - Traduzione automatica
-- **OpenCV & Pillow** - Elaborazione immagini
+- **Gemini & Pillow** - Elaborazione immagini
 - **Docker** - Containerizzazione
 
 ## 📝 Note

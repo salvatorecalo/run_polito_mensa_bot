@@ -36,5 +36,6 @@
         "TARGET_USER": "${localEnv:TARGET_USER}",
         "TELEGRAM_TOKEN": "${localEnv:TELEGRAM_TOKEN}",
         "TELEGRAM_CHAT_ID": "${localEnv:TELEGRAM_CHAT_ID}",
+        "GOOGLE_API_KEY": "${localEnv.GOOGLE_API_KEY"
     }
 }

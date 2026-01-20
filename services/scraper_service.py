@@ -3,9 +3,8 @@ import os
 import base64
 from typing import List, Optional, Tuple
 from datetime import datetime
-import cv2
-import pytesseract
 import requests
+from services import AiModel
 from utils import normalize_text, store_canteen_match
 from utils.file_operations import clean_directory
 from utils import TODAY_DATE
@@ -15,6 +14,7 @@ from database.models import Canteen, Menu
 from database.repositories import CanteenRepository, MenuRepository
 from utils.logger import setup_logger
 from services.web_scraping_service import WebScrapingService
+from PIL import Image
 
 logger = setup_logger(__name__)
 
@@ -55,9 +55,10 @@ def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
                 logger.error(f"❌ Download error for {url[:100]}: {e}")
                 return None, False
 
-    # OCR extraction
+    ai = AiModel()
+    # OCR extraction with google flash
     try:
-        image = cv2.imread(path)
+        image = Image.open(path)
         if image is None:
             logger.error(f"❌ Failed to read image: {path}")
             try:
@@ -67,14 +68,27 @@ def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
             return None, False
 
         # Image preprocessing
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        gray = cv2.medianBlur(gray, 3)
-        _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        prompt = (
+            "Analizza l'immagine del menu della mensa. Estrai il testo e restituiscilo "
+            "ESATTAMENTE nel formato strutturato qui sotto. "
+            "NON aggiungere introduzioni (come 'Ecco il testo'), NON aggiungere commenti. "
+            "Ignora loghi e decorazioni. "
+            
+            "Formato richiesto:\n"
+            "---MARKDOWN---\n"
+            "[Inserisci qui il testo con formattazione Markdown: usa ** per i titoli e * per gli elenchi]\n"
+            "---HTML---\n"
+            "[Inserisci qui il testo formattato in HTML: usa <strong> per i titoli e <ul><li> per gli elenchi]\n"
+            "---END---"
+        )
+        # Invio all'API
+        response = ai.model.generate_content([prompt, image])
+        if not response.candidates or not response.candidates[0].content.parts:
+            logger.error(f"❌ Gemini ha bloccato l'immagine o non ha trovato testo. Reason: {response.candidates[0].finish_reason}")
+            return None, False
+        text= response.text.strip()
+        logger.debug(f"📝 Gemini extracted {len(text)} characters")
         
-        # OCR extraction
-        text = pytesseract.image_to_string(thresh, lang='ita', config='--psm 6').strip()
-        logger.debug(f"📝 OCR extracted {len(text)} characters")
-
         # Validate menu keywords
         text_normalized = normalize_text(text)
         menu_keywords = ["MENSA UNIVERSITARIA", "MENU", "UNIVERSITY CANTEEN", "EDISU"]
@@ -219,7 +233,8 @@ async def fetch_and_store_menus() -> None:
     try:
         # Fetch story URLs from mirror site
         logger.info("🔍 Fetching stories from web mirror...")
-        urls = await service.get_stories_by_browser("edisu_piemonte")
+        username = os.getenv("TARGET_USER", "edisu_piemonte")
+        urls = await service.get_stories_by_browser(username=username)
         
         if not urls:
             logger.warning("⚠️ No story URLs found")

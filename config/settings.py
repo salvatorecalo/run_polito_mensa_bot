@@ -16,6 +16,7 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 DOWNLOAD_DIR = "download/stories"
 CREATED_IMAGES_DIR = "download/created_images"
 
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 # Retry
 MAX_RETRIES = 3
 
