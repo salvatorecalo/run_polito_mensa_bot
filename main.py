@@ -5,7 +5,6 @@ Main entry point for the Polito Mensa Bot
 import asyncio
 import signal
 import sys
-from utils.read_canteens_from_file import read_canteens_from_file
 from utils.set_admins import set_admins
 from telegram import Update
 from telegram.ext import (
@@ -123,8 +122,6 @@ async def main():
             raise ValueError("TELEGRAM_TOKEN is not set in environment variables")
 
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-        async for session in get_session():
-            await read_canteens_from_file(session)
         # Register Handlers
         app.add_handler(CallbackQueryHandler(handle_callback))
         app.add_handler(CommandHandler("start", start_command))
