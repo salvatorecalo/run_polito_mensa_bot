@@ -10,11 +10,11 @@ from datetime import datetime
 from functools import wraps
 from typing import Any, Callable
 from services.scraper_service import fetch_and_store_menus
-from googletrans import Translator
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 from sqlmodel import select
+from utils.translate_text import translate_text
 from utils.logger import setup_logger
 from utils.image_processing import create_long_image
 from database.connection import get_session_maker
@@ -25,7 +25,6 @@ from utils.today import TODAY_DATE
 
 # Setup logger
 logger = setup_logger(__name__)
-translator = Translator()
 
 # --- Dependency Injection Decorator ---
 
@@ -57,34 +56,6 @@ def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
         finally:
             await session.close()
     return wrapper
-
-# --- Helper Functions ---
-
-async def translate_text(text: str, dest_language: str) -> str:
-    try:
-        if not text or not dest_language or dest_language == "it":
-            return text
-        
-        # Preserva i comandi durante la traduzione
-        command_pattern = r'(/[a-zA-Z_]+)'
-        commands = re.findall(command_pattern, text)
-        text_with_placeholders = text
-        placeholders = {}
-        for i, command in enumerate(commands):
-            placeholder = f"__CMD{i}__"
-            placeholders[placeholder] = command
-            text_with_placeholders = text_with_placeholders.replace(command, placeholder, 1)
-            
-        result = await translator.translate(text_with_placeholders, dest=dest_language, src='it')
-        if not result: return text
-        
-        translated_text = result.text
-        for placeholder, command in placeholders.items():
-            translated_text = translated_text.replace(placeholder, command)
-        return translated_text
-    except Exception as e:
-        logger.error(f"Translation error: {e}")
-        return text
 
 # --- Core Logic Handlers (Standard Commands) ---
 
@@ -210,8 +181,8 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
             menu_content = menu.original_text or "Menu vuoto"
             if language != "it":
                 try:
-                    trans = await translator.translate(menu_content, src="it", dest=language)
-                    if trans: menu_content = trans.text
+                    trans = await translate_text(menu_content, dest_language=language)
+                    if trans: menu_content = trans
                 except: pass
             response_text += f"{html.escape(menu_content)}\n\n"
 
@@ -229,9 +200,9 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
 
             if language != "it":
                 try:
-                    trans = await translator.translate(menu_text, src="it", dest=language)
+                    trans = await translate_text(menu_text, dest_language=language)
                     if trans:
-                        menu_text = trans.text
+                        menu_text = trans
                 except:
                     pass
 
@@ -242,7 +213,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
                 f"menu_{user.telegram_id}_{canteen.id}.jpg"
             )
 
-            created_path = create_long_image(
+            created_path = await create_long_image(
                 text=clean_text,
                 output_path=img_path,
                 logo_text="@RunMensaBot on telegram",
