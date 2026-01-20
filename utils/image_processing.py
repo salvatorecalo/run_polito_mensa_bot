@@ -4,10 +4,12 @@ Utilities per elaborazione immagini
 import os
 from PIL import Image, ImageDraw, ImageFont
 from typing import Tuple, Optional
+from utils.translate_text import translate_text
 from config.constants import (
     IMAGE_WIDTH, IMAGE_HEIGHT, MIN_FONT_SIZE, 
     MAX_FONT_SIZE, BG_COLOR, TEXT_COLOR, IMAGE_MARGIN
 )
+from database.models import Canteen, Menu
 try:
     import cairosvg
     SVG_SUPPORT = True
@@ -155,115 +157,111 @@ def add_watermark(
     watermarked = Image.alpha_composite(image, watermark_layer)
     
     return watermarked
+"""
+Utilities per elaborazione immagini - Versione Allineata agli Handler
+"""
+import os
+import re
+from PIL import Image, ImageDraw, ImageFont
+from typing import Tuple, Optional, List
+from config.constants import (
+    IMAGE_WIDTH, IMAGE_HEIGHT, BG_COLOR, TEXT_COLOR, IMAGE_MARGIN
+)
 
+# ... (tieni la tua funzione add_watermark qui sopra senza modifiche) ...
 
-def create_long_image(
-    text: str, 
-    output_path: str, 
-    width: int = IMAGE_WIDTH,
-    height: int = IMAGE_HEIGHT,
-    min_font: int = MIN_FONT_SIZE,
-    max_font: int = MAX_FONT_SIZE,
-    bg_color: Tuple[int, int, int] = BG_COLOR,
-    text_color: Tuple[int, int, int] = TEXT_COLOR,
-    margin: int = IMAGE_MARGIN,
+def _get_font(size: int):
+    """Helper per caricare i font del sistema Polito Mensa"""
+    try:
+        return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", size)
+    except:
+        try:
+            return ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", size)
+        except:
+            return ImageFont.load_default()
+
+async def create_long_image(
+    text: str,
+    output_path: str,
+    logo_text: Optional[str] = "@RunMensaBot on telegram",
     add_logo: bool = True,
-    logo_text: Optional[str] = None,
-    logo_image_path: Optional[str] = None,
-    logo_position: str = "top-right"
+    logo_image_path: Optional[str] = "assets/run_logo.png"
 ) -> str:
     """
-    Crea un'immagine verticale con testo centrato, adattando automaticamente
-    la dimensione del font per far entrare tutto il contenuto con margini adeguati.
-    
-    Args:
-        text: Testo da visualizzare
-        output_path: Percorso del file di output
-        width: Larghezza immagine (default: 1080)
-        height: Altezza immagine (default: 1920)
-        min_font: Dimensione minima font
-        max_font: Dimensione massima font
-        bg_color: Colore sfondo RGB
-        text_color: Colore testo RGB
-        margin: Margine dai bordi in pixel
-        add_logo: Se True, aggiunge il watermark/logo
-        logo_text: Testo del logo (usato se logo_image_path è None)
-        logo_image_path: Percorso dell'immagine logo (ha priorità su logo_text)
-        logo_position: Posizione del logo ("top-left", "top-right", "bottom-left", "bottom-right")
-    
-    Returns:
-        Percorso del file salvato
+    Crea l'immagine del menu con layout strutturato.
+    Parametri allineati alla chiamata del bot handler.
     """
-    text = text.strip().upper()
-    
-    # Crea immagine
-    image = Image.new("RGB", (width, height), color=bg_color)
+    # 1. Setup Immagine e Colori (Usa le tue costanti)
+    image = Image.new("RGB", (IMAGE_WIDTH, IMAGE_HEIGHT), color=BG_COLOR)
     draw = ImageDraw.Draw(image)
     
-    # Area disponibile per il testo (con margini + spazio per logo)
-    logo_space = 60 if add_logo else 0
-    available_width = width - (margin * 2)
-    available_height = height - (margin * 2) - logo_space
+    # Font proporzionati (basati sul layout EDISU)
+    font_title = _get_font(60)   # Per la prima riga (Nome Mensa)
+    font_items = _get_font(30)   # Per i piatti
+    font_footer = _get_font(30)  # Per le note in fondo
+
+    # 2. Elaborazione del testo
+    # Dividiamo il testo in righe. Supponiamo che la prima riga sia il nome della mensa
+    lines = [line.strip().upper() for line in text.split('\n') if line.strip()]
     
-    # Trova la dimensione font ottimale
-    current_font_size = max_font
-    font = None
+    if not lines:
+        return ""
+
+    curr_y = 250 # Lasciamo spazio in alto per il logo (top-left)
+
+    # 3. Disegno Titolo (Prima riga del testo)
+    title = lines[0]
+    bbox_t = draw.textbbox((0, 0), title, font=font_title)
+    draw.text(((IMAGE_WIDTH - (bbox_t[2] - bbox_t[0])) // 2, curr_y), title, fill=TEXT_COLOR, font=font_title)
     
-    while current_font_size >= min_font:
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", current_font_size)
-        except:
-            try:
-                font = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", current_font_size)
-            except:
-                try:
-                    font = ImageFont.truetype("arialbd.ttf", current_font_size)
-                except:
-                    font = ImageFont.load_default()
-                    break
-        
-        # Calcola dimensioni del testo con questo font
-        bbox = draw.multiline_textbbox((0, 0), text, font=font, align="center")
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        
-        # Verifica se il testo entra nell'area disponibile
-        if text_width <= available_width and text_height <= available_height:
-            break
-        
-        # Riduci font size
-        current_font_size -= 2
+    curr_y += 150
+    draw.line((200, curr_y, IMAGE_WIDTH - 200, curr_y), fill=TEXT_COLOR, width=2)
+    curr_y += 80
+
+    # 4. Disegno dei Piatti (Resto del testo)
+    # Raggruppiamo il resto del testo per disegnarlo centrato
+    if len(lines) > 1:
+        content_text = "\n".join(lines[1:])
+        # Usiamo multiline_text per gestire tutto il corpo del menu
+        bbox_c = draw.multiline_textbbox((0, 0), content_text, font=font_items, align="center", spacing=15)
+        draw.multiline_text(
+            ((IMAGE_WIDTH - (bbox_c[2] - bbox_c[0])) // 2, curr_y), 
+            content_text, 
+            fill=TEXT_COLOR, 
+            font=font_items, 
+            align="center", 
+            spacing=10
+        )
+
+    # 5. Nota a piè di pagina (Footer fisso)
+    footer_note = await translate_text("Verificare la presenza di allergeni presso i locali della mensa.", dest_language="en")
+    # Disegniamo la linea sopra il footer
+    draw.line((IMAGE_MARGIN, IMAGE_HEIGHT - 200, IMAGE_WIDTH - IMAGE_MARGIN, IMAGE_HEIGHT - 200), fill=TEXT_COLOR, width=3)
     
-    # Calcola dimensioni finali del testo
-    bbox = draw.multiline_textbbox((0, 0), text, font=font, align="center")
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    
-    # Centra il testo nell'immagine
-    x = (width - text_width) // 2
-    y = (height - text_height) // 2
-    
-    draw.multiline_text((x, y), text, fill=text_color, font=font, align="center")
-    
-    # Aggiungi watermark/logo se richiesto
+    bbox_f = draw.multiline_textbbox((0, 0), footer_note, font=font_footer, align="center")
+    draw.multiline_text(
+        ((IMAGE_WIDTH - (bbox_f[2] - bbox_f[0])) // 2, IMAGE_HEIGHT - 160), 
+        footer_note, 
+        fill=TEXT_COLOR, 
+        font=font_footer, 
+        align="center"
+    )
+
+    # 6. Aggiunta Logo/Watermark (Usa la tua funzione add_watermark)
     if add_logo:
-        # Se non è specificato né logo_image_path né logo_text, usa default
-        if not logo_image_path and not logo_text:
-            logo_text = "RUN POLITO MENSA"
-        
+        # Passiamo i parametri logo_image_path e logo_text alla tua funzione originale
         image = add_watermark(
             image, 
             watermark_text=logo_text, 
             watermark_image_path=logo_image_path,
-            position=logo_position
+            position="top-left", # Posizione stile EDISU
+            logo_size=(100, 100),
+            opacity=255
         )
-    
-    # Converti in RGB se necessario (per salvare come JPEG)
+
+    # 7. Conversione e Salvataggio (Supporto per JPEG)
     if image.mode == 'RGBA':
-        rgb_image = Image.new('RGB', image.size, bg_color)
-        rgb_image.paste(image, mask=image.split()[3])  # Usa il canale alpha come maschera
-        image = rgb_image
-    
-    # Salva immagine
+        image = image.convert('RGB')
+        
     image.save(output_path, "JPEG", quality=95)
     return output_path
