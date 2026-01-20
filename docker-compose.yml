@@ -7,5 +7,6 @@ services:
       - TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
       - TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
       - TARGET_USER: ${TARGET_USER}
+      - GOOGLE_API_KEY: ${GOOGLE_API_KEY}
     volumes:
       - ./data:/workspace/data
