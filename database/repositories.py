@@ -293,6 +293,17 @@ class MenuRepository(BaseRepository[Menu]):
         menu = await self.get_menu_by_date(target_date, canteen_id, meal_type)
         return menu is not None
 
+    async def delete_menus_by_date(self, target_date: date) -> None:
+        """
+        Delete all menus for a specific date
+
+        Args:
+            target_date: Date to delete menus for
+        """
+        from sqlalchemy import delete
+        stmt = delete(Menu).where(col(Menu.date) == target_date)
+        await self.session.execute(stmt)
+
 
 class UserRepository(BaseRepository[User]):
     """
