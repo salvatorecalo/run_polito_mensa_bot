@@ -14,7 +14,8 @@ from .handlers import \
         refresh_menu, \
         set_user_image_or_text_option,\
         get_user_image_or_text_option, \
-        switch_user_role
+        switch_user_role, \
+        debug_menus
 from .scheduler import BotScheduler
 
 __all__ = [
@@ -30,5 +31,6 @@ __all__ = [
     "refresh_menu",
     "set_user_image_or_text_option",
     "get_user_image_or_text_option",
-    "switch_user_role"
+    "switch_user_role",
+    "debug_menus"
 ]

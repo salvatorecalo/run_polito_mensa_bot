@@ -5,7 +5,6 @@ Main entry point for the Polito Mensa Bot
 import asyncio
 import signal
 import sys
-from services.web_scraping_service import WebScrapingService
 from utils.set_admins import set_admins
 from telegram import Update
 from telegram.ext import (
@@ -18,11 +17,11 @@ from telegram.ext import (
     CallbackQueryHandler
 )
 
-from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_canteen, delete_canteen, unsubscribe_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option, handle_callback, switch_user_role
+from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_canteen, delete_canteen, unsubscribe_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option, handle_callback, switch_user_role, debug_menus
 from bot.scheduler import BotScheduler
-from config import TELEGRAM_TOKEN
+from config import TELEGRAM_TOKEN, has_canteens_been_modified
 from database.connection import close_db, create_db_and_tables, get_session, init_db
-from database.repositories import UserRepository
+from database.repositories import CanteenRepository, UserRepository
 from services.notification_service import NotificationService
 from services.scraper_service import fetch_and_store_menus
 from utils.logger import setup_logger
@@ -105,7 +104,7 @@ async def main():
     global scheduler, app
 
     logger.info("🚀 Starting Polito Mensa Bot...")
-
+    loop = asyncio.get_running_loop()
     try:
         # 1. Initialize Database
         await init_db()
@@ -114,8 +113,8 @@ async def main():
         # 2. Setup Scheduler
         scheduler = BotScheduler()
         # Schedule task for 11:25 and 20:00 (approx)
-        scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 11, 45)
-        scheduler.add_daily_task(lambda: asyncio.create_task(scheduled_task()), 20, 0)
+        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 11, 45)
+        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 20, 0)
         scheduler.start()
 
         # 3. Setup Telegram Bot
@@ -123,9 +122,6 @@ async def main():
             raise ValueError("TELEGRAM_TOKEN is not set in environment variables")
 
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-        async for session in get_session():
-            canteens_service = WebScrapingService()
-            await canteens_service.get_edisu_canteens(session)
         # Register Handlers
         app.add_handler(CallbackQueryHandler(handle_callback))
         app.add_handler(CommandHandler("start", start_command))
@@ -135,13 +131,12 @@ async def main():
         app.add_handler(CommandHandler("unsubscribe_canteen", unsubscribe_canteen))
         app.add_handler(CommandHandler("add_canteen", add_canteen))
         app.add_handler(CommandHandler("delete_canteen", delete_canteen))
-        # app.add_handler(CommandHandler("print_all_canteen", print_all_canteen))
         app.add_handler(CommandHandler("set_language", set_language))
         app.add_handler(CommandHandler("refresh_menu", refresh_menu))
         app.add_handler(CommandHandler("set_user_image_or_text_option", set_user_image_or_text_option))
         app.add_handler(CommandHandler("get_user_image_or_text_option", get_user_image_or_text_option))
         app.add_handler(CommandHandler("switch_user_role", switch_user_role))
-
+        app.add_handler(CommandHandler("debug_menus", debug_menus))
         app.add_handler(
             ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)
         )
@@ -153,7 +148,7 @@ async def main():
         logger.info("🤖 Initializing Bot...")
         await app.initialize()
         await app.start()
-        asyncio.run(set_admins(["238016214"]))
+        await set_admins(["238016214", "6638746092"]) # set the run user to admin every time the bot start so he can add or remove admins
 
         logger.info("Creating download/stories directory (no if exists)")
 
@@ -169,8 +164,6 @@ async def main():
             if not stop_signal.done():
                 stop_signal.set_result(None)
 
-        loop = asyncio.get_running_loop()
-
         # Cross-platform signal handling
         if sys.platform != "win32":
             loop.add_signal_handler(signal.SIGINT, handle_signal)
@@ -185,9 +178,8 @@ async def main():
             await stop_signal
         except asyncio.CancelledError:
             pass
-
+        
         logger.info("🛑 Stopping Bot...")
-
         # 6. Manual Stop Lifecycle
         if app.updater.running:
             await app.updater.stop()

@@ -6,25 +6,25 @@ import html
 import os
 import re
 import asyncio
-from datetime import date, datetime
+from datetime import datetime
 from functools import wraps
 from typing import Any, Callable
-
-from googletrans import Translator
+from services.scraper_service import fetch_and_store_menus
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
-
+from sqlmodel import select
+from utils.translate_text import translate_text
 from utils.logger import setup_logger
 from utils.image_processing import create_long_image
 from database.connection import get_session_maker
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
-from database.models import Canteen
-from config.settings import CREATED_IMAGES_DIR 
+from database.models import Canteen, Menu
+from config.settings import CREATED_IMAGES_DIR , has_canteens_been_modified
+from utils.today import TODAY_DATE
 
 # Setup logger
 logger = setup_logger(__name__)
-translator = Translator()
 
 # --- Dependency Injection Decorator ---
 
@@ -33,7 +33,9 @@ def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         if 'session' in kwargs:
             return await func(update, context, *args, **kwargs)
-            
+        if not update.effective_message:
+            logger.error("Update.effective message was not found")
+            return
         session_maker = get_session_maker()
         if not session_maker:
             logger.error("Session maker non inizializzato")
@@ -54,34 +56,6 @@ def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
         finally:
             await session.close()
     return wrapper
-
-# --- Helper Functions ---
-
-async def translate_text(text: str, dest_language: str) -> str:
-    try:
-        if not text or not dest_language or dest_language == "it":
-            return text
-        
-        # Preserva i comandi durante la traduzione
-        command_pattern = r'(/[a-zA-Z_]+)'
-        commands = re.findall(command_pattern, text)
-        text_with_placeholders = text
-        placeholders = {}
-        for i, command in enumerate(commands):
-            placeholder = f"__CMD{i}__"
-            placeholders[placeholder] = command
-            text_with_placeholders = text_with_placeholders.replace(command, placeholder, 1)
-            
-        result = await translator.translate(text_with_placeholders, dest=dest_language, src='it')
-        if not result: return text
-        
-        translated_text = result.text
-        for placeholder, command in placeholders.items():
-            translated_text = translated_text.replace(placeholder, command)
-        return translated_text
-    except Exception as e:
-        logger.error(f"Translation error: {e}")
-        return text
 
 # --- Core Logic Handlers (Standard Commands) ---
 
@@ -121,6 +95,34 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sess
         await update.effective_message.reply_text(translated, reply_markup=reply_markup, parse_mode="HTML")
 
 @inject_db
+async def debug_menus(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
+    """Debug: mostra tutti i menu nel DB"""
+    if not session or not update.effective_message:
+        return
+    
+    canteen_repo = CanteenRepository(session)
+    
+    # Prendi TUTTI i menu di oggi
+    stmt = select(Menu).where(Menu.date == TODAY_DATE)
+    result = await session.execute(stmt)
+    all_menus = result.scalars().all()
+    
+    msg = f"🔍 DEBUG - Menu salvati per {TODAY_DATE}:\n\n"
+    
+    if not all_menus:
+        msg += "❌ Nessun menu trovato nel database!\n"
+    else:
+        for menu in all_menus:
+            canteen = await canteen_repo.get_by_id(menu.canteen_id)
+            msg += f"📍 {canteen.name if canteen else 'Unknown'}\n"
+            msg += f"   ID Mensa: {menu.canteen_id}\n"
+            msg += f"   Tipo: {menu.meal_type}\n"
+            msg += f"   Data: {menu.date}\n"
+            msg += f"   Testo: {menu.original_text[:100]}...\n\n"
+    
+    await update.effective_message.reply_text(msg)
+    
+@inject_db
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None) -> None:
     if not session or not update.effective_user or not context or not update.effective_message: return
     
@@ -158,20 +160,20 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
     # RESTO DELLA LOGICA MENU
     logger.info(f"User selected canteens: {user.selected_canteen_ids}")
 
-    today = date.today()
+    
     meal_type = "lunch" if datetime.now().hour < 15 else "dinner"
     
     menu_repo = MenuRepository(session)
     canteen_repo = CanteenRepository(session)
-    menus = await menu_repo.get_menus_by_date_for_canteens(today, user.selected_canteen_ids, meal_type)
+    menus = await menu_repo.get_menus_by_date_for_canteens(TODAY_DATE, user.selected_canteen_ids, meal_type)
     
     if not menus:
-        text = f"📅 Nessun menu disponibile per il {today.strftime('%d/%m')} ({meal_type})."
+        text = f"📅 Nessun menu disponibile per il {TODAY_DATE.strftime('%d/%m')} ({meal_type}). Aspetta le 11:45 o le 20:00 di sera per riprovare."
         translated = await translate_text(text, language)
         await context.bot.send_message(chat_id=chat_id, text=translated)
         return
 
-    response_text = f"🍽️ <b>Menu {today.strftime('%d/%m')} ({meal_type})</b>\n\n"
+    response_text = f"🍽️ <b>Menu {TODAY_DATE.strftime('%d/%m')} ({meal_type})</b>\n\n"
     for menu in menus:
         canteen = await canteen_repo.get_by_id(menu.canteen_id)
         if canteen:
@@ -179,8 +181,8 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
             menu_content = menu.original_text or "Menu vuoto"
             if language != "it":
                 try:
-                    trans = await translator.translate(menu_content, src="it", dest=language)
-                    if trans: menu_content = trans.text
+                    trans = await translate_text(menu_content, dest_language=language)
+                    if trans: menu_content = trans
                 except: pass
             response_text += f"{html.escape(menu_content)}\n\n"
 
@@ -198,9 +200,9 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
 
             if language != "it":
                 try:
-                    trans = await translator.translate(menu_text, src="it", dest=language)
+                    trans = await translate_text(menu_text, dest_language=language)
                     if trans:
-                        menu_text = trans.text
+                        menu_text = trans
                 except:
                     pass
 
@@ -211,10 +213,12 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
                 f"menu_{user.telegram_id}_{canteen.id}.jpg"
             )
 
-            created_path = create_long_image(
+            created_path = await create_long_image(
                 text=clean_text,
                 output_path=img_path,
-                logo_text="POLITO MENSA"
+                logo_text="@RunMensaBot on telegram",
+                add_logo=True,
+                logo_image_path="assets/run_logo.png"
             )
 
             if created_path:
@@ -452,7 +456,7 @@ async def get_user_image_or_text_option_cmd(update: Update, context: ContextType
 async def refresh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
     if not session or not update.effective_user or not update.effective_message:
         return
-
+    
     user_repo = UserRepository(session)
     # CORRETTO: await perché dobbiamo verificare se è admin
     if not await user_repo.is_admin(update.effective_user.id):
@@ -470,7 +474,6 @@ async def refresh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
         session_maker = get_session_maker()
         session_inner = session_maker()
         try:
-            from services.scraper_service import fetch_and_store_menus
             await fetch_and_store_menus()
             await status_msg.edit_text(
                 "✅ Menu aggiornati con successo!\nUsa /menu per visualizzare i nuovi dati."
@@ -508,7 +511,8 @@ async def add_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, sessio
 
     canteen_repo = CanteenRepository(session)
     new_canteen = Canteen(name=name, location_description=location)
-    
+    global has_canteens_been_modified
+    has_canteens_been_modified = True
     try:
         await canteen_repo.create(new_canteen)
         await update.effective_message.reply_text(f"✅ Mensa '{name}' aggiunta con successo.")
@@ -541,6 +545,8 @@ async def delete_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, ses
     try:
         await canteen_repo.delete(canteen.id)
         await update.effective_message.reply_text(f"✅ Mensa '{name}' eliminata.")
+        global has_canteens_been_modified
+        has_canteens_been_modified = False
     except Exception as e:
         await update.effective_message.reply_text(f"❌ Errore: {str(e)}")
 

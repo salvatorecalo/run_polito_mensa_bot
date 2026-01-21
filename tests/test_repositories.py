@@ -1,10 +1,9 @@
 import pytest
-from datetime import date
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel import SQLModel
 from database.models import Canteen, Menu
 from database.repositories import UserRepository, CanteenRepository, MenuRepository
-
+from utils import TODAY_DATE
 # Use in-memory SQLite for testing
 DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -73,14 +72,13 @@ async def test_menu_repository(db_session):
     m_repo = MenuRepository(db_session)
     menu = Menu(
         canteen_id=canteen.id,
-        date=date.today(),
+        date=TODAY_DATE,
         meal_type="lunch",
         courses_json={},
         original_text="txt",
-        translated_text="txt",
     )
     await m_repo.create(menu)
 
-    fetched = await m_repo.get_menu_by_date(date.today(), canteen.id, "lunch")
+    fetched = await m_repo.get_menu_by_date(today, canteen.id, "lunch")
     assert fetched is not None
     assert fetched.original_text == "txt"

@@ -94,7 +94,7 @@ run_polito_mensa_bot/
 - **instagrapi** - API Instagram
 - **Tesseract OCR** - Estrazione testo dalle immagini
 - **googletrans** - Traduzione automatica
-- **OpenCV & Pillow** - Elaborazione immagini
+- **Gemini & Pillow** - Elaborazione immagini
 - **Docker** - Containerizzazione
 
 ## 📝 Note
