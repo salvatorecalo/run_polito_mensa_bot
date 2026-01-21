@@ -14,17 +14,26 @@ from database.models import Canteen, Menu
 from database.repositories import CanteenRepository, MenuRepository
 from utils.logger import setup_logger
 from services.web_scraping_service import WebScrapingService
-from PIL import Image
+import hashlib
 
 logger = setup_logger(__name__)
+
+_ai_instance = None
+
+def get_ai_model():
+    """Restituisce l'istanza dell'AI, creandola solo se non esiste"""
+    global _ai_instance
+    if _ai_instance is None:
+        from services.ai_model import AiModel
+        logger.info("🤖 Primo avvio dell'AI: caricamento Florence-2 in corso...")
+        _ai_instance = AiModel()
+    return _ai_instance
 
 def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
     """
     Download image and extract text via OCR
     Returns: (extracted_text, is_valid_menu)
     """
-    import hashlib
-
     url_hash = hashlib.md5(url.encode()).hexdigest()
     filename = f"story_{url_hash}.jpg"
     path = os.path.join(DOWNLOAD_DIR, filename)
@@ -55,40 +64,13 @@ def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
                 logger.error(f"❌ Download error for {url[:100]}: {e}")
                 return None, False
 
-    ai = AiModel()
-    # OCR extraction with google flash
+    ai = get_ai_model()
+    # OCR extraction with microsoft florence 2
     try:
-        image = Image.open(path)
-        if image is None:
-            logger.error(f"❌ Failed to read image: {path}")
-            try:
-                os.remove(path)
-            except:
-                pass
+        text = ai.extracted_text(path)
+        if not text:
             return None, False
-
-        # Image preprocessing
-        prompt = (
-            "Analizza l'immagine del menu della mensa. Estrai il testo e restituiscilo "
-            "ESATTAMENTE nel formato strutturato qui sotto. "
-            "NON aggiungere introduzioni (come 'Ecco il testo'), NON aggiungere commenti. "
-            "Ignora loghi e decorazioni. "
-            
-            "Formato richiesto:\n"
-            "---MARKDOWN---\n"
-            "[Inserisci qui il testo con formattazione Markdown: usa ** per i titoli e * per gli elenchi]\n"
-            "---HTML---\n"
-            "[Inserisci qui il testo formattato in HTML: usa <strong> per i titoli e <ul><li> per gli elenchi]\n"
-            "---END---"
-        )
-        # Invio all'API
-        response = ai.model.generate_content([prompt, image])
-        if not response.candidates or not response.candidates[0].content.parts:
-            logger.error(f"❌ Gemini ha bloccato l'immagine o non ha trovato testo. Reason: {response.candidates[0].finish_reason}")
-            return None, False
-        text= response.text.strip()
-        logger.debug(f"📝 Gemini extracted {len(text)} characters")
-        
+        logger.debug(f"📝 Local AI extracted {len(text)} characters")
         # Validate menu keywords
         text_normalized = normalize_text(text)
         menu_keywords = ["MENSA UNIVERSITARIA", "MENU", "UNIVERSITY CANTEEN", "EDISU"]

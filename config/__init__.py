@@ -19,5 +19,4 @@ __all__ = [
     'TEXT_COLOR',
     'TELEGRAM_BATCH_SIZE',
     'SCHEDULE_TIMES',
-    'GOOGLE_API_KEY'
 ]

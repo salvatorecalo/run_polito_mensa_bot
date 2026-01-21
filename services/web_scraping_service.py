@@ -53,7 +53,7 @@ class WebScrapingService:
                 
                 # Sul loro sito hanno un div con la classe profile-stories-item che wrappa le img interessate
                 media_elements = await page.locator(".profile-stories-item > img").all()
-                logger.info(f"TROVATI QUESTI ELEMENTI {media_elements}")
+                logger.info(f"Trovati questi elementi {media_elements}")
                 
                 for i,elm in enumerate(media_elements):
                     url = (
