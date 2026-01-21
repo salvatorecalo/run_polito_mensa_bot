@@ -2,9 +2,10 @@
 Services package
 """
 
-# from .instagram_service import InstagramService
 from .telegram_service import TelegramService
+from .ai_model import AiModel
 
 __all__ = [
-    #"InstagramService", 
-    "TelegramService"]
+    "TelegramService",
+    "AiModel"
+]
