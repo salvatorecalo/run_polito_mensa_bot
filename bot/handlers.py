@@ -20,7 +20,7 @@ from utils.image_processing import create_long_image
 from database.connection import get_session_maker
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from database.models import Canteen, Menu
-from config.settings import CREATED_IMAGES_DIR , has_canteens_been_modified
+from config.settings import CREATED_IMAGES_DIR
 from utils.today import get_today_date
 
 # Setup logger
@@ -511,8 +511,6 @@ async def add_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, sessio
 
     canteen_repo = CanteenRepository(session)
     new_canteen = Canteen(name=name, location_description=location)
-    global has_canteens_been_modified
-    has_canteens_been_modified = True
     try:
         await canteen_repo.create(new_canteen)
         await update.effective_message.reply_text(f"✅ Mensa '{name}' aggiunta con successo.")
@@ -545,8 +543,6 @@ async def delete_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, ses
     try:
         await canteen_repo.delete(canteen.id)
         await update.effective_message.reply_text(f"✅ Mensa '{name}' eliminata.")
-        global has_canteens_been_modified
-        has_canteens_been_modified = False
     except Exception as e:
         await update.effective_message.reply_text(f"❌ Errore: {str(e)}")
 
