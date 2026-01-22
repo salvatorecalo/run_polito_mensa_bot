@@ -173,6 +173,41 @@ class CanteenRepository(BaseRepository[Canteen]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def initialize_all_canteens(self):
+        default_canteens: List[Canteen] = [
+            Canteen(
+                name="Mensa Universitaria Borsellino",
+                location_description="Via Andrea Vochieri"
+            ),
+            Canteen(
+                name="Mensa Universitaria Castelfidardo",
+                location_description="Corso Castelfidardo",
+            ),
+            Canteen(
+                name="Mensa Universitaria Olimpia",
+                location_description="Lungo Dora Siena",
+            ),
+            Canteen(
+                name="Mensa Universitaria Principe Amedeo",
+                location_description="Via Principe Amedeo",
+            ),
+            Canteen(
+                name="Mensa Universitaria Villa Claretta",
+                location_description="Via Berta",
+            ),
+            Canteen(
+                name="Mensa Universitaria Braccini",
+                location_description="Via Paolo Braccini",
+            ),
+            Canteen(
+                name="Mensa Universitaria Murazzi",
+                location_description="Murazzi del Po Gipo Farassino",
+            )
+        ]
+        
+        for canteen in default_canteens:
+            await self.create(canteen)
+            await self.session.commit()
 class MenuRepository(BaseRepository[Menu]):
     """
     Repository for Menu entities
@@ -292,6 +327,17 @@ class MenuRepository(BaseRepository[Menu]):
         """
         menu = await self.get_menu_by_date(target_date, canteen_id, meal_type)
         return menu is not None
+
+    async def delete_menus_by_date(self, target_date: date) -> None:
+        """
+        Delete all menus for a specific date
+
+        Args:
+            target_date: Date to delete menus for
+        """
+        from sqlalchemy import delete
+        stmt = delete(Menu).where(col(Menu.date) == target_date)
+        await self.session.execute(stmt)
 
 
 class UserRepository(BaseRepository[User]):

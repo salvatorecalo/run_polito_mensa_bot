@@ -7,15 +7,15 @@ import requests
 from services import AiModel
 from utils import normalize_text, store_canteen_match
 from utils.file_operations import clean_directory
-from utils import TODAY_DATE
+from utils import get_today_date
 from config import DOWNLOAD_DIR, CREATED_IMAGES_DIR
-from database.connection import create_db_and_tables, get_session, init_db
+from database.connection import create_db_and_tables, get_session, get_session_maker, init_db
 from database.models import Canteen, Menu
 from database.repositories import CanteenRepository, MenuRepository
 from utils.logger import setup_logger
 from services.web_scraping_service import WebScrapingService
 import hashlib
-
+import re
 logger = setup_logger(__name__)
 
 _ai_instance = None
@@ -24,8 +24,7 @@ def get_ai_model():
     """Restituisce l'istanza dell'AI, creandola solo se non esiste"""
     global _ai_instance
     if _ai_instance is None:
-        from services.ai_model import AiModel
-        logger.info("🤖 Primo avvio dell'AI: caricamento Florence-2 in corso...")
+        logger.info("🤖 Primo avvio dell'AI: caricamento Groq in corso...")
         _ai_instance = AiModel()
     return _ai_instance
 
@@ -65,7 +64,7 @@ def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
                 return None, False
 
     ai = get_ai_model()
-    # OCR extraction with microsoft florence 2
+    # OCR extraction with Groq Llama model
     try:
         text = ai.extracted_text(path)
         if not text:
@@ -85,6 +84,7 @@ def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
             return None, False  # ✅ Return immediately if invalid
 
         logger.info(f"✅ Valid menu detected with {len(text)} chars")
+        logger.info(f"📝 Extracted text: {text[:500]}...")  # Log first 500 chars
         return text, True
 
     except Exception as e:
@@ -127,16 +127,35 @@ async def process_image_url(
 
         meal_type = "dinner" if has_cena else "lunch"
 
+        # Extract date from text
+        date_match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', text_normalized)
+        if not date_match:
+            logger.warning(f"⏭️ No date found in menu text: {text_normalized[:200]}")
+            return "skipped"
+
+        day, month, year = map(int, date_match.groups())
+        try:
+            from datetime import date
+            menu_date = date(year, month, day)
+        except ValueError:
+            logger.warning(f"⏭️ Invalid date {day}/{month}/{year} in menu text")
+            return "skipped"
+
+        if menu_date != get_today_date():
+            logger.warning(f"⏭️ Menu date {menu_date} does not match today {get_today_date()}")
+            return "skipped"
+
         # Match canteen using fuzzy matching
         best_match = None
         best_score = 0
         for canteen in all_canteens:
             score = store_canteen_match(text_normalized, canteen)
+            logger.debug(f"Score for {canteen.name}: {score}")
             if score > best_score:
                 best_score = score
                 best_match = canteen
 
-        if not best_match or best_score < 2:
+        if not best_match or best_score < 1:
             logger.warning(f"⚠️ No reliable canteen match (best score: {best_score})")
             logger.debug(f"Text sample: {text_normalized[:300]}")
             return "skipped"
@@ -162,7 +181,7 @@ async def process_image_url(
 
         # Check if menu already exists
         existing_menu = await menu_repo.get_menu_by_date(
-            TODAY_DATE, 
+            get_today_date(), 
             matched_canteen.id, 
             meal_type
         )
@@ -179,7 +198,7 @@ async def process_image_url(
             logger.info(f"➕ Creating new menu for {matched_canteen.name}")
             new_menu = Menu(
                 canteen_id=matched_canteen.id,
-                date=TODAY_DATE,
+                date=get_today_date(),
                 meal_type=meal_type,
                 courses_json=courses_json,
                 original_text=text,
@@ -209,6 +228,16 @@ async def fetch_and_store_menus() -> None:
     # Initialize database
     await init_db()
     await create_db_and_tables()
+    
+    # Delete existing menus for today to start fresh
+    session_maker = get_session_maker()
+    session = session_maker()
+    try:
+        menu_repo = MenuRepository(session)
+        await menu_repo.delete_menus_by_date(get_today_date())
+        await session.commit()
+    finally:
+        await session.close()
     
     service = WebScrapingService()
 

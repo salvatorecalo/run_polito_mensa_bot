@@ -48,16 +48,18 @@ class AiModel:
                     {
                         "role": "system", 
                         "content": (
-                            "Sei un estrattore OCR robotico. Estrai il testo dall'immagine e "
-                            "racchiudilo ESCLUSIVAMENTE tra i tag <MENU> e </MENU>. "
-                            "Esempio: <MENU>\nTesto trovato...\n</MENU>\n"
-                            "NON aggiungere nient'altro fuori dai tag."
+                            "Sei un estrattore OCR avanzato. Estrai TUTTO il testo visibile dall'immagine, "
+                            "inclusi header, footer, testi piccoli negli angoli, nomi di mense, date e contenuti del menu. "
+                            "Mantieni l'ordine logico del testo come appare nell'immagine. "
+                            "Racchiudi il testo estratto ESCLUSIVAMENTE tra i tag <MENU> e </MENU>. "
+                            "Esempio: <MENU>\nNome Mensa\nData\nMenu...\n</MENU>\n"
+                            "NON aggiungere commenti, descrizioni o testo fuori dai tag."
                         )
                     },
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "Estrai il testo dell'immagine tra i tag <MENU>."},
+                            {"type": "text", "text": "Estrai tutto il testo dall'immagine, inclusi nomi e header."},
                             {
                                 "type": "image_url",
                                 "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}
@@ -65,8 +67,8 @@ class AiModel:
                         ]
                     }
                 ],
-                temperature=0.0, # 0.0 riduce la "parlantina" del modello
-                max_tokens=2048,
+                temperature=0.0,
+                max_tokens=4096,  # Aumentato per testi più lunghi
             )
 
             raw_text = completion.choices[0].message.content

@@ -20,8 +20,8 @@ from utils.image_processing import create_long_image
 from database.connection import get_session_maker
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from database.models import Canteen, Menu
-from config.settings import CREATED_IMAGES_DIR , has_canteens_been_modified
-from utils.today import TODAY_DATE
+from config.settings import CREATED_IMAGES_DIR
+from utils.today import get_today_date
 
 # Setup logger
 logger = setup_logger(__name__)
@@ -103,11 +103,11 @@ async def debug_menus(update: Update, context: ContextTypes.DEFAULT_TYPE, sessio
     canteen_repo = CanteenRepository(session)
     
     # Prendi TUTTI i menu di oggi
-    stmt = select(Menu).where(Menu.date == TODAY_DATE)
+    stmt = select(Menu).where(Menu.date == get_today_date())
     result = await session.execute(stmt)
     all_menus = result.scalars().all()
     
-    msg = f"🔍 DEBUG - Menu salvati per {TODAY_DATE}:\n\n"
+    msg = f"🔍 DEBUG - Menu salvati per {get_today_date()}:\n\n"
     
     if not all_menus:
         msg += "❌ Nessun menu trovato nel database!\n"
@@ -165,15 +165,15 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
     
     menu_repo = MenuRepository(session)
     canteen_repo = CanteenRepository(session)
-    menus = await menu_repo.get_menus_by_date_for_canteens(TODAY_DATE, user.selected_canteen_ids, meal_type)
+    menus = await menu_repo.get_menus_by_date_for_canteens(get_today_date(), user.selected_canteen_ids, meal_type)
     
     if not menus:
-        text = f"📅 Nessun menu disponibile per il {TODAY_DATE.strftime('%d/%m')} ({meal_type}). Aspetta le 11:45 o le 20:00 di sera per riprovare."
+        text = f"📅 Nessun menu disponibile per il {get_today_date().strftime('%d/%m')} ({meal_type}). Aspetta le 11:45 o le 20:00 di sera per riprovare."
         translated = await translate_text(text, language)
         await context.bot.send_message(chat_id=chat_id, text=translated)
         return
 
-    response_text = f"🍽️ <b>Menu {TODAY_DATE.strftime('%d/%m')} ({meal_type})</b>\n\n"
+    response_text = f"🍽️ <b>Menu {get_today_date().strftime('%d/%m')} ({meal_type})</b>\n\n"
     for menu in menus:
         canteen = await canteen_repo.get_by_id(menu.canteen_id)
         if canteen:
@@ -511,8 +511,6 @@ async def add_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, sessio
 
     canteen_repo = CanteenRepository(session)
     new_canteen = Canteen(name=name, location_description=location)
-    global has_canteens_been_modified
-    has_canteens_been_modified = True
     try:
         await canteen_repo.create(new_canteen)
         await update.effective_message.reply_text(f"✅ Mensa '{name}' aggiunta con successo.")
@@ -545,8 +543,6 @@ async def delete_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, ses
     try:
         await canteen_repo.delete(canteen.id)
         await update.effective_message.reply_text(f"✅ Mensa '{name}' eliminata.")
-        global has_canteens_been_modified
-        has_canteens_been_modified = False
     except Exception as e:
         await update.effective_message.reply_text(f"❌ Errore: {str(e)}")
 
