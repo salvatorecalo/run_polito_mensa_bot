@@ -5,8 +5,8 @@ Bot Telegram che monitora automaticamente le stories Instagram delle mense Edisu
 ## 🎯 Funzionalità
 
 - **Monitoraggio automatico** delle stories Instagram delle mense Edisu
-- **Estrazione del testo** dai menu usando OCR (Tesseract)
-- **Traduzione automatica** in inglese
+- **Estrazione del testo** dai menu usando groq ai, perchè le immagini che carica attualmente edisu sono difficili da estrapolare con semplice tesseract (22/01/2026)
+- **Traduzione automatica** nella lingua scelta dall'utente usando il pacchetto googletrans
 - **Invio programmato** su Telegram agli orari dei pasti:
   - 🍝 **11:25** - Menu pranzo
   - 🍕 **20:00** - Menu cena
@@ -91,26 +91,18 @@ run_polito_mensa_bot/
 
 - **Python 3.13**
 - **python-telegram-bot** - Interazione con Telegram
-- **instagrapi** - API Instagram
-- **Tesseract OCR** - Estrazione testo dalle immagini
 - **googletrans** - Traduzione automatica
-- **Gemini & Pillow** - Elaborazione immagini
+- **Groq & Pillow** - Elaborazione immagini
 - **Docker** - Containerizzazione
 
 ## 📝 Note
 
-- Il bot salva la sessione Instagram per evitare login ripetuti
+- Il bot usa un middleman (storynavigation attualmente 22/01/2026 per scaricare le storie instagram evitando di essere bannati da instagram, usiamo playwright perchè il sito carica le informazioni in differita con javascript)
 - Le immagini vengono create con sfondo arancione e testo bianco
 - I file temporanei vengono puliti automaticamente ad ogni esecuzione
 - Il bot supporta l'invio di max 10 immagini per volta (limite Telegram)
 
 ## 🐛 Troubleshooting
-
-### Errore 2FA Instagram
-Se Instagram richiede autenticazione a due fattori, accedi all'account via app/browser e riprova.
-
-### Challenge Instagram
-Instagram potrebbe richiedere una verifica. Accedi manualmente all'account e completa la challenge.
 
 ### Bot non riceve comandi
 Verifica che il bot abbia i permessi necessari nel gruppo e che il token sia corretto.

@@ -24,7 +24,7 @@ def get_ai_model():
     """Restituisce l'istanza dell'AI, creandola solo se non esiste"""
     global _ai_instance
     if _ai_instance is None:
-        logger.info("🤖 Primo avvio dell'AI: caricamento Florence-2 in corso...")
+        logger.info("🤖 Primo avvio dell'AI: caricamento Groq in corso...")
         _ai_instance = AiModel()
     return _ai_instance
 
