@@ -16,7 +16,6 @@ from telegram.ext import (
     filters,
     CallbackQueryHandler
 )
-
 from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_canteen, delete_canteen, unsubscribe_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option, handle_callback, switch_user_role, debug_menus
 from bot.scheduler import BotScheduler
 from config import TELEGRAM_TOKEN
@@ -24,8 +23,7 @@ from database.connection import close_db, create_db_and_tables, get_session, ini
 from database.repositories import CanteenRepository, UserRepository
 from services.notification_service import NotificationService
 from services.scraper_service import fetch_and_store_menus
-from utils.logger import setup_logger
-
+from utils import setup_logger, is_holiday
 # Setup Logger
 logger = setup_logger(__name__)
 
@@ -74,8 +72,9 @@ async def scheduled_task():
     """Task executed by scheduler"""
     try:
         logger.info("⏰ Starting scheduled task...")
-        
-        
+        if is_holiday():
+            logger.info("🎉 Today is a holiday! Skipping menu fetch and notifications.")
+            return
         # 1. Fetch data from InstagramNavigator -> DB
         await fetch_and_store_menus()
 

@@ -21,4 +21,3 @@ SCHEDULE_TIMES = [
     {"hour": 11, "minute": 25},  # Lunch
     {"hour": 20, "minute": 0}     # Dinner
 ]
-
