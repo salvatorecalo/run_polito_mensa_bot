@@ -19,7 +19,7 @@ from telegram.ext import (
 
 from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_canteen, delete_canteen, unsubscribe_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option, handle_callback, switch_user_role, debug_menus
 from bot.scheduler import BotScheduler
-from config import TELEGRAM_TOKEN, has_canteens_been_modified
+from config import TELEGRAM_TOKEN
 from database.connection import close_db, create_db_and_tables, get_session, init_db
 from database.repositories import CanteenRepository, UserRepository
 from services.notification_service import NotificationService
@@ -74,7 +74,8 @@ async def scheduled_task():
     """Task executed by scheduler"""
     try:
         logger.info("⏰ Starting scheduled task...")
-
+        
+        
         # 1. Fetch data from InstagramNavigator -> DB
         await fetch_and_store_menus()
 
@@ -113,7 +114,7 @@ async def main():
         # 2. Setup Scheduler
         scheduler = BotScheduler()
         # Schedule task for 11:25 and 20:00 (approx)
-        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 11, 45)
+        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 14, 16)
         scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 20, 0)
         scheduler.start()
 
@@ -149,7 +150,14 @@ async def main():
         await app.initialize()
         await app.start()
         await set_admins(["238016214", "6638746092"]) # set the run user to admin every time the bot start so he can add or remove admins
-
+        
+        async for session in get_session():
+             canteen_repo = CanteenRepository(session)
+             canteens = await canteen_repo.get_all_active()
+             if not canteens:
+                logger.info("Canteens not found in db, so I'm recreating them...")
+                await canteen_repo.initialize_all_canteens()
+             
         logger.info("Creating download/stories directory (no if exists)")
 
         if app.updater is None:
