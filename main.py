@@ -113,8 +113,8 @@ async def main():
         # 2. Setup Scheduler
         scheduler = BotScheduler()
         # Schedule task for 11:25 and 20:00 (approx)
-        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 14, 16)
-        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 20, 0)
+        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 11, 45)
+        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 19, 0)
         scheduler.start()
 
         # 3. Setup Telegram Bot

@@ -9,7 +9,7 @@ Bot Telegram che monitora automaticamente le stories Instagram delle mense Edisu
 - **Traduzione automatica** nella lingua scelta dall'utente usando il pacchetto googletrans
 - **Invio programmato** su Telegram agli orari dei pasti:
   - 🍝 **11:25** - Menu pranzo
-  - 🍕 **20:00** - Menu cena
+  - 🍕 **19:00** - Menu cena
 - **Sistema di iscrizioni** per ricevere aggiornamenti automatici
 - **Supporto gruppi** - Aggiungi il bot a un gruppo Telegram
 
