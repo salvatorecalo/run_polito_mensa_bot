@@ -51,7 +51,7 @@ def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
     else:
         if not os.path.exists(path):
             try:
-                logger.debug(f"⬇️ Downloading image from {url[:100]}...")
+                logger.info(f"⬇️ Downloading image from {url[:100]}...")
                 response = requests.get(url, timeout=30, headers={
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 })
