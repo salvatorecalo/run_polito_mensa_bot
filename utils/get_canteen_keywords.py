@@ -1,9 +1,6 @@
 from database.models import Canteen
 from utils import normalize_text
 
-from database.models import Canteen
-from utils import normalize_text
-
 def get_canteen_keywords(canteen: Canteen) -> list[str]:
     # Parole che non aiutano a distinguere le mense
     blacklist = {"mensa", "universitaria", "universitario", "del", "per", "allo", "studio", "edisu"}
