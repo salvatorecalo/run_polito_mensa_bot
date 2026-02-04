@@ -16,7 +16,6 @@ from telegram.error import BadRequest
 from sqlmodel import select
 from utils.translate_text import translate_text
 from utils.logger import setup_logger
-from utils.image_processing import create_long_image
 from database.connection import get_session_maker
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from database.models import Canteen, Menu
@@ -95,6 +94,40 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sess
         await update.effective_message.reply_text(translated, reply_markup=reply_markup, parse_mode="HTML")
 
 @inject_db
+async def debug_user_in_a_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
+    """Debug: mostra tutti gli utenti in una cantina"""
+    if not session or not update.effective_message:
+        return
+    
+    if not context.args:
+        await update.effective_message.reply_text("⚠️ Specifica l'ID della mensa. Esempio: /debug_canteen 1")
+        return
+    
+    try:
+        canteen_id = int(context.args[0])
+    except ValueError:
+        await update.effective_message.reply_text("❌ L'ID deve essere un numero intero.")
+        return
+    
+    user_repo = UserRepository(session)
+    canteen_repo = CanteenRepository(session)
+    canteen = await canteen_repo.get_by_id(canteen_id)
+    if not canteen:
+        await update.effective_message.reply_text(f"❓ Mensa con ID {canteen_id} non trovata.")
+        return
+
+    users = await user_repo.get_users_by_canteen(canteen_id)
+    if not users:
+        await update.effective_message.reply_text(f"📍 Nessun utente iscritto alla mensa: **{canteen.name}**")
+        return 
+    
+    response = f"👥 **Utenti iscritti a {canteen.name}:**\n\n"
+    for u in users:
+        username = f"(@{u.username})" if u.username else ""
+        response += f"• {u.first_name} {username} [ID: `{u.telegram_id}`]\n"
+
+    await update.effective_message.reply_text(response, parse_mode="Markdown")
+@inject_db
 async def debug_menus(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
     """Debug: mostra tutti i menu nel DB"""
     if not session or not update.effective_message:
@@ -102,7 +135,6 @@ async def debug_menus(update: Update, context: ContextTypes.DEFAULT_TYPE, sessio
     
     canteen_repo = CanteenRepository(session)
     
-    # Prendi TUTTI i menu di oggi
     stmt = select(Menu).where(Menu.date == get_today_date())
     result = await session.execute(stmt)
     all_menus = result.scalars().all()
@@ -205,29 +237,6 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
                         menu_text = trans
                 except:
                     pass
-
-            clean_text = html.unescape(re.sub(r'<[^>]+>', '', menu_text))
-
-            img_path = os.path.join(
-                CREATED_IMAGES_DIR,
-                f"menu_{user.telegram_id}_{canteen.id}.jpg"
-            )
-
-            created_path = await create_long_image(
-                text=clean_text,
-                output_path=img_path,
-                logo_text="@RunMensaBot on telegram",
-                add_logo=True,
-                logo_image_path="assets/run_logo.png"
-            )
-
-            if created_path:
-                with open(created_path, 'rb') as photo:
-                    await context.bot.send_photo(
-                        chat_id=chat_id,
-                        photo=photo,
-                        caption=f"🍽️ {canteen.name}"
-                    )
 
 # --- Callback Router ---
 
