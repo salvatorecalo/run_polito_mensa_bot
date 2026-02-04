@@ -1,4 +1,5 @@
 import asyncio
+import html
 import os
 import base64
 from typing import List, Optional, Tuple
@@ -12,6 +13,7 @@ from config import DOWNLOAD_DIR, CREATED_IMAGES_DIR
 from database.connection import create_db_and_tables, get_session, get_session_maker, init_db
 from database.models import Canteen, Menu
 from database.repositories import CanteenRepository, MenuRepository
+from utils.image_processing import create_long_image
 from utils.logger import setup_logger
 from services.web_scraping_service import WebScrapingService
 import hashlib
@@ -167,7 +169,24 @@ async def process_image_url(
         if not matched_canteen.id:
             logger.error(f"❌ Matched canteen '{matched_canteen.name}' has no ID")
             return "error"
+        
+        img_path = os.path.join(
+            CREATED_IMAGES_DIR,
+            f"menu_{matched_canteen.id}_{get_today_date().strftime('%Y%m%d')}_{meal_type}.jpg"
+        )
+        
+        menu_text_for_img = f"{matched_canteen.name}\n\n{text}"
+        # Puliamo eventuali tag se presenti
+        clean_text = html.unescape(re.sub(r'<[^>]+>', '', menu_text_for_img))
 
+        created_path = await create_long_image(
+            text=clean_text,
+            output_path=img_path,
+            logo_text="@RunMensaBot on telegram",
+            add_logo=True,
+            logo_image_path="assets/run_logo.png"
+        )
+            
         # Prepare menu data
         courses_json = {
             "raw_lines": [line.strip() for line in text.split("\n") if line.strip()],
@@ -190,7 +209,7 @@ async def process_image_url(
             # Update existing menu
             logger.info(f"🔄 Updating existing menu for {matched_canteen.name}")
             existing_menu.original_text = text
-            existing_menu.image_path = url
+            existing_menu.image_path = created_path
             existing_menu.courses_json = courses_json
             await menu_repo.update(existing_menu)
         else:
@@ -202,7 +221,7 @@ async def process_image_url(
                 meal_type=meal_type,
                 courses_json=courses_json,
                 original_text=text,
-                image_path=url,
+                image_path=created_path,
                 story_id=f"web_{int(datetime.now().timestamp())}_{matched_canteen.id}"
             )
             await menu_repo.create(new_menu)

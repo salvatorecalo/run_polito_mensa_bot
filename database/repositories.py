@@ -172,7 +172,7 @@ class CanteenRepository(BaseRepository[Canteen]):
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
-
+    
     async def initialize_all_canteens(self):
         default_canteens: List[Canteen] = [
             Canteen(
