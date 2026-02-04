@@ -45,11 +45,10 @@ class TelegramService:
     async def send_photo(
         self, chat_id: str | int, photo_path: str, caption: Optional[str] = None
     ) -> bool:
-        """Send a photo with optional caption"""
+        """Send a photo"""
         url = f"{self.BASE_URL}/sendPhoto"
+        logger.info(f"URL PHOTO {url}")
         data = {"chat_id": str(chat_id), "parse_mode": "Markdown"}
-        if caption:
-            data["caption"] = caption
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:

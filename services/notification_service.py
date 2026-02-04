@@ -10,6 +10,11 @@ from database.models import Menu
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from services.telegram_service import TelegramService
 from utils.today import get_today_date
+import os
+import html
+import re
+from utils.image_processing import create_long_image
+from config.settings import CREATED_IMAGES_DIR # o dove tieni le costanti
 
 logger = setup_logger(__name__)
 
@@ -33,26 +38,14 @@ class NotificationService:
             user_repo = UserRepository(session)
             menu_repo = MenuRepository(session)
             canteen_repo = CanteenRepository(session)
-
-            # 1. Fetch Canteens first to map ID -> Name (UX improvement)
             canteens = await canteen_repo.get_all()
-            canteen_map = {c.id: c.name for c in canteens}
-
-            # 2. Get all active users
-            users = await user_repo.get_all_active()
-            if not users:
-                logger.info("⚠️ No active subscribers found.")
-                return
-
-            # 3. Group users by canteen to minimize DB queries
-            #    Structure: {canteen_id: [user_list]}
             users_by_canteen = {}
-            for user in users:
-                if user.selected_canteen_ids:
-                    if user.selected_canteen_ids not in users_by_canteen:
-                        users_by_canteen[user.selected_canteen_ids] = []
-                    users_by_canteen[user.selected_canteen_ids].append(user)
-
+            for canteen in canteens:
+                if not canteen.id:
+                    continue
+                users = await user_repo.get_users_by_canteen(canteen.id)
+                users_by_canteen[canteen.id] = users
+            
             # 4. Process each canteen
             for canteen_id, canteen_users in users_by_canteen.items():
                 # Fetch menu for this canteen
@@ -67,26 +60,30 @@ class NotificationService:
                 )
 
                 # Get readable name
-                canteen_name = canteen_map.get(canteen_id, f"Canteen {canteen_id}")
-
-                # Prepare message content
+                canteen = await canteen_repo.get_by_id(canteen_id)
+                if not canteen:
+                    logger.info("No canteen found")
+                    return
+                if not canteen.name:
+                    logger.info("No canteen name found")
+                canteen_name = canteen.name
                 caption = self._format_menu_caption(menu, canteen_name)
+                # IL PROBLEMA STA QUI
                 image_path = menu.image_path
-
-                # Send to each user
                 for user in canteen_users:
                     try:
                         # Send message (asynchronous Telegram API calls)
                         if image_path:
-                            await self.telegram.send_photo(
-                                chat_id=user.telegram_id,
-                                photo_path=image_path,
-                                caption=caption,
-                            )
-                        else:
-                            await self.telegram.send_message(
-                                chat_id=user.telegram_id, text=caption
-                            )
+                            if user.image_or_text == "image":
+                                await self.telegram.send_photo(
+                                    chat_id=user.telegram_id,
+                                    photo_path=image_path,
+                                    caption=caption,
+                                )
+                            else:
+                                await self.telegram.send_message(
+                                    chat_id=user.telegram_id, text=caption
+                                )
                     except Exception as e:
                         # Log error but continue with next user (don't break the loop)
                         logger.error(
@@ -106,15 +103,13 @@ class NotificationService:
             # Fallback to JSON
         courses = menu.courses_json
         if isinstance(courses, dict):
-            for course, dishes in courses.items():
-                # Format header (e.g., "PRIMI")
-                text += f"*{course.upper()}*:\n"
+            for dishes in courses.values():
 
                 if isinstance(dishes, list):
                     for dish in dishes:
-                        text += f"- {dish}\n"
+                        text += f"{dish}\n"
                 elif isinstance(dishes, str):
-                    text += f"- {dishes}\n"
+                    text += f"{dishes}\n"
 
                 text += "\n"
 
