@@ -100,13 +100,11 @@ async def debug_user_in_a_canteen(update: Update, context: ContextTypes.DEFAULT_
         logger.error("Nessuna sessione trovata")
         return
     user_repo = UserRepository(session)
-    user_id = update.effective_user.id
-    user = await user_repo.get_by_telegram_id(user_id)
-    if not user:
-        logger.error("Nessun utente trovato")
+    if not await user_repo.is_admin(update.effective_user.id):
+        await update.effective_message.reply_text(
+            "❌ Comando riservato agli admin."
+        )
         return
-    if not user.is_admin:
-        await update.effective_message.reply_text("Non hai l'autorizzazione per esguire questo comando")
     if not context.args:
         await update.effective_message.reply_text("⚠️ Specifica l'ID della mensa. Esempio: /debug_canteen 1")
         return
@@ -138,18 +136,15 @@ async def debug_user_in_a_canteen(update: Update, context: ContextTypes.DEFAULT_
 @inject_db
 async def debug_menus(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
     """Debug: mostra tutti i menu nel DB"""
-    if not session or not update.effective_message:
+    if not session or not update.effective_message or not update.effective_user:
         return
 
     user_repo = UserRepository(session)
-    user_id = update.effective_user.id
-    user = await user_repo.get_by_telegram_id(user_id)
-    if not user:
-        logger.error("Nessun utente trovato")
+    if not await user_repo.is_admin(update.effective_user.id):
+        await update.effective_message.reply_text(
+            "❌ Comando riservato agli admin."
+        )
         return
-    if not user.is_admin:
-        await update.effective_message.reply_text("Non hai l'autorizzazione per esguire questo comando")
-        
     canteen_repo = CanteenRepository(session)
     
     stmt = select(Menu).where(Menu.date == get_today_date())
