@@ -148,7 +148,7 @@ async def main():
         logger.info("🤖 Initializing Bot...")
         await app.initialize()
         await app.start()
-        await set_admins(["238016214", "6638746092"]) # set the run user to admin every time the bot start so he can add or remove admins
+        await set_admins(["6638746092"]) # set the run user to admin every time the bot start so he can add or remove admins
         
         async for session in get_session():
              canteen_repo = CanteenRepository(session)
