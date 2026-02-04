@@ -10,11 +10,6 @@ from database.models import Menu
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from services.telegram_service import TelegramService
 from utils.today import get_today_date
-import os
-import html
-import re
-from utils.image_processing import create_long_image
-from config.settings import CREATED_IMAGES_DIR # o dove tieni le costanti
 
 logger = setup_logger(__name__)
 

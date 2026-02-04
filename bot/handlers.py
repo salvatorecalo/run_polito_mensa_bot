@@ -96,9 +96,17 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sess
 @inject_db
 async def debug_user_in_a_canteen(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None):
     """Debug: mostra tutti gli utenti in una cantina"""
-    if not session or not update.effective_message:
+    if not session or not update.effective_message or not update.effective_user:
+        logger.error("Nessuna sessione trovata")
         return
-    
+    user_repo = UserRepository(session)
+    user_id = update.effective_user.id
+    user = await user_repo.get_by_telegram_id(user_id)
+    if not user:
+        logger.error("Nessun utente trovato")
+        return
+    if not user.is_admin:
+        await update.effective_message.reply_text("Non hai l'autorizzazione per esguire questo comando")
     if not context.args:
         await update.effective_message.reply_text("⚠️ Specifica l'ID della mensa. Esempio: /debug_canteen 1")
         return
@@ -132,7 +140,16 @@ async def debug_menus(update: Update, context: ContextTypes.DEFAULT_TYPE, sessio
     """Debug: mostra tutti i menu nel DB"""
     if not session or not update.effective_message:
         return
-    
+
+    user_repo = UserRepository(session)
+    user_id = update.effective_user.id
+    user = await user_repo.get_by_telegram_id(user_id)
+    if not user:
+        logger.error("Nessun utente trovato")
+        return
+    if not user.is_admin:
+        await update.effective_message.reply_text("Non hai l'autorizzazione per esguire questo comando")
+        
     canteen_repo = CanteenRepository(session)
     
     stmt = select(Menu).where(Menu.date == get_today_date())
@@ -578,7 +595,7 @@ async def switch_user_role(update: Update, context: ContextTypes.DEFAULT_TYPE, s
         user = await user_repo.get_by_telegram_id((int(new_admin_id)))
         if not user:
             await update.effective_message.reply_text(
-                f"✅ Utente non trovato"
+                f"Utente non trovato"
             )
             return
         await user_repo.switch_user_role(int(new_admin_id))
