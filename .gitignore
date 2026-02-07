@@ -11,3 +11,4 @@ data/
 .mypy_cache/
 htmlcov/
 download/
+data/bot.db
