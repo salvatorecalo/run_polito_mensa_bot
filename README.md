@@ -97,7 +97,7 @@ run_polito_mensa_bot/
 
 ## 📝 Note
 
-- Il bot usa un middleman (storynavigation attualmente 22/01/2026 per scaricare le storie instagram evitando di essere bannati da instagram, usiamo playwright perchè il sito carica le informazioni in differita con javascript)
+- Il bot usa un middleman (mollygram attualmente 07/02/2026 per scaricare le storie instagram evitando di essere bannati da instagram, usiamo playwright perchè il sito carica le informazioni in differita con javascript)
 - Le immagini vengono create con sfondo arancione e testo bianco
 - I file temporanei vengono puliti automaticamente ad ogni esecuzione
 - Il bot supporta l'invio di max 10 immagini per volta (limite Telegram)
