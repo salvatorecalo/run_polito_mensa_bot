@@ -1,7 +1,7 @@
 """
 Main entry point for the Polito Mensa Bot
 """
-
+import os
 import asyncio
 import signal
 import sys
@@ -120,6 +120,7 @@ async def main():
         if not TELEGRAM_TOKEN:
             raise ValueError("TELEGRAM_TOKEN is not set in environment variables")
 
+        os.makedirs("data", exist_ok=True)
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
         # Register Handlers
         app.add_handler(CallbackQueryHandler(handle_callback))
