@@ -121,6 +121,9 @@ async def main():
             raise ValueError("TELEGRAM_TOKEN is not set in environment variables")
 
         os.makedirs("data", exist_ok=True)
+        os.makedirs("download", exist_ok=True)
+        os.makedirs("download/stories", exist_ok=True)
+        os.makedirs("download/created_images", exist_ok=True)
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
         # Register Handlers
         app.add_handler(CallbackQueryHandler(handle_callback))
@@ -149,7 +152,7 @@ async def main():
         logger.info("🤖 Initializing Bot...")
         await app.initialize()
         await app.start()
-        await set_admins(["6638746092"]) # set the run user to admin every time the bot start so he can add or remove admins
+        await set_admins(["6638746092", "238016214"]) # set the run user to admin every time the bot start so he can add or remove admins
         
         async for session in get_session():
              canteen_repo = CanteenRepository(session)
@@ -158,8 +161,6 @@ async def main():
                 logger.info("Canteens not found in db, so I'm recreating them...")
                 await canteen_repo.initialize_all_canteens()
              
-        logger.info("Creating download/stories directory (no if exists)")
-
         if app.updater is None:
             raise RuntimeError("Telegram Updater is None (polling not possible)")
 

@@ -1,9 +1,6 @@
-from typing import List
-from database.models import Canteen
 from utils.logger import setup_logger
 import asyncio
 from playwright.async_api import async_playwright
-import datetime
 
 logger = setup_logger(__name__)
 
@@ -31,44 +28,28 @@ class WebScrapingService:
                 user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
             )
             page = await context.new_page()
-            
-            target_url = f"https://mollygram.com/en3"
+            target_url = f"https://storynavigation.com/user/{username}"
             try:
                 logger.info(f"Navigazione verso {target_url}...")
                 await page.goto(target_url, wait_until='domcontentloaded', timeout=60000)
-                
-                try:
-                    await page.goto(target_url, wait_until='domcontentloaded')
-                    await page.wait_for_selector("#link")
-                    await page.fill("#link", f"https://www.instagram.com/{username}/")
-                    # Click sul bottone usando l'ID fornito
-                    await page.click("#btn-download")
-                    logger.info("⏳ Attendiamo che le storie vengano generate...")
-                    # IL TRUCCO: Aspettiamo che appaia ALMENO una card delle storie
-                    # Usiamo lo spazio (discendente) invece di '>' per massima compatibilità
-                    story_selector = ".load img"
-                    try:
-                        # Aspetta fino a 30 secondi che il sito elabori i dati di Instagram
-                        await page.wait_for_selector(story_selector, timeout=30000)
-                    except Exception:
-                        logger.error("❌ Timeout: le storie non sono apparse. Forse l'utente non ne ha di attive?")
-                        await page.screenshot(path="debug_result_not_found.png")
-                        return []
-
-                    # 4. Recupero di tutti gli elementi
-                    media_elements = await page.locator(story_selector).all()
-                    logger.info(f"Trovati questi elementi {media_elements}")
-                except Exception as e:
-                    logger.error(e)
-                
+                await page.wait_for_selector(".profile-stories-item img", timeout=10000)
+                # Aspetta che appaiano gli elementi delle storie (o i tab)
+                # Nota: I selettori (.story-item, img) cambiano da sito a sito.
+                # Qui cerchiamo immagini che potrebbero essere storie.
+                # A volte bisogna cliccare un tab "Stories". 
+                # Instanavigation di solito le carica di default o dopo lo scroll.
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await asyncio.sleep(3) # Aspetta rendering Javascript
+                # Sul loro sito hanno un div con la classe profile-stories-item che wrappa le img interessate
+                media_elements = await page.locator(".profile-stories-item > img").all()
+                logger.info(f"Trovati questi elementi {media_elements}")
                 for i,elm in enumerate(media_elements):
                     url = (
                         await elm.get_attribute("data-src") or
                         await elm.get_attribute("data-lazy-src") or
                         await elm.get_attribute("data-original") or
                         await elm.get_attribute("src")
-                    )
-                    
+                    )  
                     if url and not url.startswith("data:image"):
                         logger.debug(f"  [{i+1}] URL trovato: {url[:80]}")
                         stories_urls.append(url)
