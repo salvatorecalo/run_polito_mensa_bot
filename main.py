@@ -31,7 +31,7 @@ logger = setup_logger(__name__)
 # Global variables
 scheduler = None
 app = None
-
+os.umask(0o007)
 
 async def bot_added_to_group(
     update: Update, context: ContextTypes.DEFAULT_TYPE
