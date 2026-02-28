@@ -51,8 +51,8 @@ async def send_message_to_everyone(update: Update, context: ContextTypes.DEFAULT
     count = 0
     
     for user in all_users:
-        if user.id != update.effective_user.id:
-            return
+        if user.telegram_id == update.effective_user.id:
+            continue
         try:
             await telegram_service.send_message(
                 chat_id=user.telegram_id, 
@@ -63,9 +63,7 @@ async def send_message_to_everyone(update: Update, context: ContextTypes.DEFAULT
             await asyncio.sleep(0.05) 
         except Exception as e:
             logger.error(f"Errore invio a {user.telegram_id}: {e}")
-
-    await update.effective_message.reply_text(f"✅ Messaggio inviato a {count} utenti.")
-    
+    await update.effective_message.reply_text(f"✅ Broadcast completato. Inviata a {count} utenti.")
 @inject_db
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None) -> None:
     if not session or not update.effective_user: return
