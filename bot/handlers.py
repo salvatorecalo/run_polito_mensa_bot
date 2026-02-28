@@ -51,6 +51,8 @@ async def send_message_to_everyone(update: Update, context: ContextTypes.DEFAULT
     count = 0
     
     for user in all_users:
+        if user.id != update.effective_user.id:
+            return
         try:
             await telegram_service.send_message(
                 chat_id=user.telegram_id, 
