@@ -16,7 +16,7 @@ from telegram.ext import (
     filters,
     CallbackQueryHandler
 )
-from bot.handlers import cancel_command, menu_command, start_command, subscribe_canteen, add_canteen, delete_canteen, unsubscribe_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option, handle_callback, switch_user_role, debug_menus, debug_user_in_a_canteen
+from bot.handlers import cancel_command, menu_command, send_message_to_everyone, start_command, subscribe_canteen, add_canteen, delete_canteen, unsubscribe_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option, handle_callback, switch_user_role, debug_menus, debug_user_in_a_canteen
 from bot.scheduler import BotScheduler
 from config import TELEGRAM_TOKEN
 from database.connection import close_db, create_db_and_tables, get_session, init_db
@@ -136,6 +136,7 @@ async def main():
         app.add_handler(CommandHandler("get_user_image_or_text_option", get_user_image_or_text_option))
         app.add_handler(CommandHandler("switch_user_role", switch_user_role))
         app.add_handler(CommandHandler("debug_menus", debug_menus))
+        app.add_handler(CommandHandler("broadcast", send_message_to_everyone))
         app.add_handler(CommandHandler("debug_user_in_a_canteen", debug_user_in_a_canteen))
         app.add_handler(
             ChatMemberHandler(bot_added_to_group, ChatMemberHandler.MY_CHAT_MEMBER)

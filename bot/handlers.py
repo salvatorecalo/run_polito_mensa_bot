@@ -4,60 +4,66 @@ Uniformato per l'utilizzo esclusivo di bottoni e gestione robusta dei None
 """
 import html
 import os
-import re
 import asyncio
 from datetime import datetime
-from functools import wraps
-from typing import Any, Callable
+from database.connection import get_session
 from services.scraper_service import fetch_and_store_menus
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 from sqlmodel import select
+from services.telegram_service import TelegramService
+from utils.decorator import inject_db
 from utils.translate_text import translate_text
 from utils.logger import setup_logger
-from database.connection import get_session_maker
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from database.models import Canteen, Menu
-from config.settings import CREATED_IMAGES_DIR
 from utils.today import get_today_date
 
 # Setup logger
 logger = setup_logger(__name__)
 
-# --- Dependency Injection Decorator ---
-
-def inject_db(func: Callable[..., Any]) -> Callable[..., Any]:
-    @wraps(func)
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        if 'session' in kwargs:
-            return await func(update, context, *args, **kwargs)
-        if not update.effective_message:
-            logger.error("Update.effective message was not found")
-            return
-        session_maker = get_session_maker()
-        if not session_maker:
-            logger.error("Session maker non inizializzato")
-            return
+@inject_db
+async def send_message_to_everyone(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None) -> None:
+    if not session:
+        return
+    
+    if not update or not update.effective_message or not update.effective_user:
+        return
+        
+    if not context.args:
+        await update.effective_message.reply_text("⚠️ Usa: /broadcast <messaggio>")
+        return
+        
+    broadcast_msg = " ".join(context.args)
+    user_id = update.effective_user.id
+    
+    telegram_service = TelegramService()
+    user_repo = UserRepository(session)
             
-        session = session_maker()
+    if not await user_repo.is_admin(user_id):
+        await update.effective_message.reply_text("❌ Non hai i permessi per questa azione.")
+        return
+            
+    logger.info(f"📢 Avvio broadcast da parte di {user_id}")
+    
+    all_users = await user_repo.get_all()
+    count = 0
+    
+    for user in all_users:
         try:
-            result = await func(update, context, session=session, *args, **kwargs)
-            await session.commit()
-            return result
+            await telegram_service.send_message(
+                chat_id=user.telegram_id, 
+                text=broadcast_msg
+            )
+            count += 1
+            # Anti-flood (limite Telegram 30 msg/s)
+            await asyncio.sleep(0.05) 
         except Exception as e:
-            logger.error(f"❌ Database error in handler {func.__name__}: {e}", exc_info=True)
-            await session.rollback()
-            
-            msg = update.effective_message or (update.callback_query.message if update.callback_query else None)
-            if msg:
-                await msg.reply_text("⚠️ Si è verificato un errore interno. Riprova più tardi.")
-        finally:
-            await session.close()
-    return wrapper
+            logger.error(f"Errore invio a {user.telegram_id}: {e}")
 
-# --- Core Logic Handlers (Standard Commands) ---
-
+    await update.effective_message.reply_text(f"✅ Messaggio inviato a {count} utenti.")
+    
 @inject_db
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, session=None) -> None:
     if not session or not update.effective_user: return

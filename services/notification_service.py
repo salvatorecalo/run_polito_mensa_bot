@@ -2,7 +2,10 @@
 Notification Service: Sends menus from Database to Telegram Subscribers
 """
 
+import asyncio
 from datetime import datetime
+from utils.decorator import inject_db
+from utils.translate_text import translate_text
 from utils.logger import setup_logger
 # Ensure correct imports based on previous files
 from database.connection import get_session
@@ -10,7 +13,8 @@ from database.models import Menu
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from services.telegram_service import TelegramService
 from utils.today import get_today_date
-
+from telegram import Update
+from telegram.ext import ContextTypes
 logger = setup_logger(__name__)
 
 
