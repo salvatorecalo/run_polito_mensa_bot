@@ -1,6 +1,7 @@
 from utils.logger import setup_logger
 import asyncio
 from playwright.async_api import async_playwright
+import re
 
 logger = setup_logger(__name__)
 
@@ -32,6 +33,12 @@ class WebScrapingService:
             try:
                 logger.info(f"Navigazione verso {target_url}...")
                 await page.goto(target_url, wait_until='domcontentloaded', timeout=60000)
+                
+                cookie_button = page.get_by_text("Conenti", exact=False)
+                if await cookie_button.is_visible(timeout=5000):
+                    await cookie_button.click()
+                    logger.info("🍪 Popup cookie rimosso con successo!")
+                    await page.wait_for_timeout(1000)
                 await page.wait_for_selector(".profile-stories-item img", timeout=10000)
                 # Aspetta che appaiano gli elementi delle storie (o i tab)
                 # Nota: I selettori (.story-item, img) cambiano da sito a sito.

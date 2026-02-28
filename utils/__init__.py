@@ -10,6 +10,7 @@ from .fuzzy_match import fuzzy_match
 from .store_canteen_match import store_canteen_match
 from .today import get_today_date
 from .is_holiday import is_holiday
+from .setup_data_folder import setup_data_folder
 
 __all__ = [
     'setup_logger',
@@ -21,5 +22,6 @@ __all__ = [
     'fuzzy_match',
     'store_canteen_match',
     'get_today_date',
-    "is_holiday"
+    "is_holiday",
+    "setup_data_folder"
 ]

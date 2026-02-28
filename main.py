@@ -23,7 +23,7 @@ from database.connection import close_db, create_db_and_tables, get_session, ini
 from database.repositories import CanteenRepository, UserRepository
 from services.notification_service import NotificationService
 from services.scraper_service import fetch_and_store_menus
-from utils import setup_logger, is_holiday
+from utils import setup_logger, is_holiday, setup_data_folder
 
 # Setup Logger
 logger = setup_logger(__name__)
@@ -107,6 +107,7 @@ async def main():
     logger.info("🚀 Starting Polito Mensa Bot...")
     loop = asyncio.get_running_loop()
     try:
+        setup_data_folder()
         await init_db()
         await create_db_and_tables()
         scheduler = BotScheduler()
@@ -116,14 +117,9 @@ async def main():
 
         scheduler.start()
 
-        # 3. Setup Telegram Bot
         if not TELEGRAM_TOKEN:
             raise ValueError("TELEGRAM_TOKEN is not set in environment variables")
-
-        os.makedirs("data", exist_ok=True)
-        os.makedirs("download", exist_ok=True)
-        os.makedirs("download/stories", exist_ok=True)
-        os.makedirs("download/created_images", exist_ok=True)
+        
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
         # Register Handlers
         app.add_handler(CallbackQueryHandler(handle_callback))

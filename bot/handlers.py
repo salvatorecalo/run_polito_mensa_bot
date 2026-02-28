@@ -194,14 +194,13 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
             if "Message is not modified" not in str(e):
                 raise
         return
-    # RESTO DELLA LOGICA MENU
-    # logger.info(f"User selected canteens: {user.selected_canteen_ids}")
     meal_type = "lunch" if datetime.now().hour < 15 else "dinner"
     menu_repo = MenuRepository(session)
     canteen_repo = CanteenRepository(session)
+    
     menus = await menu_repo.get_menus_by_date_for_canteens(get_today_date(), user.selected_canteen_ids, meal_type)
     if not menus:
-        text = f"📅 Nessun menu disponibile per il {get_today_date().strftime('%d/%m')} ({meal_type}). Aspetta le 11:45 o le 19:00 di sera per riprovare."
+        text = f"📅 Nessun menu disponibile per il {get_today_date().strftime('%d/%m')} ({meal_type}). Aspetta le 11:45 di pomeriggio o le 19:00 di sera per riprovare."
         translated = await translate_text(text, language)
         await context.bot.send_message(chat_id=chat_id, text=translated)
         return
