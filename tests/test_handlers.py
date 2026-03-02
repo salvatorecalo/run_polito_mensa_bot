@@ -8,7 +8,7 @@ import pytest
 from telegram import Chat, Message, Update, User, CallbackQuery
 from telegram.ext import ContextTypes
 
-from bot.handlers import (
+from bot.show_canteen_buttons import (
     cancel_command, menu_command, start_command, handle_callback,
     show_canteen_buttons, handle_canteen_toggle, show_language_buttons,
     handle_language_change, get_user_image_or_text_option, set_language,

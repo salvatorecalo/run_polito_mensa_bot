@@ -5,6 +5,9 @@ import os
 import asyncio
 import signal
 import sys
+from bot import add_canteen, debug_menus, debug_user_in_a_canteen, delete_canteen, handle_callback, menu_command, refresh_menu, start_command, switch_user_role
+from bot.send_messages_to_everyone import send_message_to_everyone
+from bot.show_canteen_buttons import cancel_command, get_user_image_or_text_option, set_language, set_user_image_or_text_option, subscribe_canteen, unsubscribe_canteen
 from utils.set_admins import set_admins
 from telegram import Update
 from telegram.ext import (
@@ -16,7 +19,6 @@ from telegram.ext import (
     filters,
     CallbackQueryHandler
 )
-from bot.handlers import cancel_command, menu_command, send_message_to_everyone, start_command, subscribe_canteen, add_canteen, delete_canteen, unsubscribe_canteen, set_language, refresh_menu, set_user_image_or_text_option, get_user_image_or_text_option, handle_callback, switch_user_role, debug_menus, debug_user_in_a_canteen
 from bot.scheduler import BotScheduler
 from config import TELEGRAM_TOKEN
 from database.connection import close_db, create_db_and_tables, get_session, init_db
