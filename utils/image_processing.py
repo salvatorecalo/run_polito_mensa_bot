@@ -118,7 +118,7 @@ async def create_long_image(
     font_items = _get_font(30)
     font_footer = _get_font(30)
     headers_keywords = ["PRIMI", "SECONDI", "CONTORNI", "PIATTO UNICO"]
-
+    banned_words = ["EDISU PIEMONTE", "STUDIO UNIVERSITARIO", "MENSA UNIVERSITARIA"]
     # Pulizia testo
     lines = [line.strip().upper() for line in text.split('\n') if line.strip()]
     if not lines: return ""
@@ -134,6 +134,8 @@ async def create_long_image(
     max_w = IMAGE_WIDTH - (IMAGE_MARGIN * 2)
     
     for line in lines[1:]:
+        if any(keyword in line for keyword in banned_words):
+            continue
         is_header = any(keyword in line for keyword in headers_keywords)
         
         if is_header:
