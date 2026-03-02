@@ -3,7 +3,7 @@ Utilities per elaborazione immagini - Versione Ottimizzata
 """
 import os
 from PIL import Image, ImageDraw, ImageFont
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 from utils.translate_text import translate_text
 from config.constants import (
     IMAGE_WIDTH, IMAGE_HEIGHT, BG_COLOR, TEXT_COLOR, IMAGE_MARGIN
@@ -15,7 +15,7 @@ try:
 except ImportError:
     SVG_SUPPORT = False
 
-def wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> str:
+def wrap_text(text: str, font: Union[ImageFont.FreeTypeFont, ImageFont.ImageFont], max_width: int) -> str:
     """Divide il testo in più righe per adattarsi alla larghezza massima."""
     lines = []
     for paragraph in text.split('\n'):
@@ -114,41 +114,47 @@ async def create_long_image(
     image = Image.new("RGB", (IMAGE_WIDTH, IMAGE_HEIGHT), color=BG_COLOR)
     draw = ImageDraw.Draw(image)
     font_title = _get_font(60)
+    font_section_title = _get_font(45)
     font_items = _get_font(30)
     font_footer = _get_font(30)
+    headers_keywords = ["PRIMI", "SECONDI", "CONTORNI", "PIATTO UNICO"]
 
     # Pulizia testo
     lines = [line.strip().upper() for line in text.split('\n') if line.strip()]
     if not lines: return ""
 
-    curr_y = 250 
-
+    curr_y = 150
     # Titolo
     title = lines[0].replace("MENSA UNIVERSITARIA", "").replace("DEL POLITECNICO", "").strip()
     bbox_t = draw.textbbox((0, 0), title, font=font_title)
     draw.text(((IMAGE_WIDTH - (bbox_t[2] - bbox_t[0])) // 2, curr_y), title, fill=TEXT_COLOR, font=font_title)
-    
-    curr_y += 150
+    curr_y += 100
     draw.line((200, curr_y, IMAGE_WIDTH - 200, curr_y), fill=TEXT_COLOR, width=2)
-    curr_y += 80
+    curr_y += 60
+    max_w = IMAGE_WIDTH - (IMAGE_MARGIN * 2)
+    
+    for line in lines[1:]:
+        is_header = any(keyword in line for keyword in headers_keywords)
+        
+        if is_header:
+            current_font = font_section_title
+            curr_y += 20  
+        else:
+            current_font = font_items
 
-    # Piatti con Wrapping (Fix logico qui)
-    if len(lines) > 1:
-        raw_content = "\n".join(lines[1:])
-        max_w = IMAGE_WIDTH - (IMAGE_MARGIN * 2)
-        content_text = wrap_text(raw_content, font_items, max_w)
+        wrapped_line = wrap_text(line, current_font, max_w)
         
-        line_spacing = 15
-        bbox_c = draw.multiline_textbbox((0, 0), content_text, font=font_items, align="center", spacing=line_spacing)
-        
+        bbox_l = draw.multiline_textbbox((0, 0), wrapped_line, font=current_font, align="center")
+        line_w = bbox_l[2] - bbox_l[0]
+        line_h = bbox_l[3] - bbox_l[1]
         draw.multiline_text(
-            ((IMAGE_WIDTH - (bbox_c[2] - bbox_c[0])) // 2, curr_y), 
-            content_text, 
+            ((IMAGE_WIDTH - line_w) // 2, curr_y), 
+            wrapped_line, 
             fill=TEXT_COLOR, 
-            font=font_items, 
-            align="center", 
-            spacing=line_spacing
+            font=current_font, 
+            align="center"
         )
+        curr_y += line_h + 30
 
     # Footer
     footer_note = await translate_text("Verificare la presenza di allergeni presso i locali della mensa.", dest_language="en")

@@ -230,11 +230,12 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
                 user_repo = UserRepository(session)
                 user = await user_repo.get_by_telegram_id(update.effective_user.id)
                 language = user.language if user else "it"
+                translation = await translate_text(meal_type, language)
                 with open(menu.image_path, 'rb') as photo:
                     await context.bot.send_photo(
                         chat_id=chat_id, 
                         photo=photo,
-                        caption=f"📍 Menu ({translate_text(meal_type, language)})"
+                        caption=f"📍 Menu ({translation})"
                     )
             else:
                 # Se l'immagine manca per qualche motivo, inviamo il testo come fallback
