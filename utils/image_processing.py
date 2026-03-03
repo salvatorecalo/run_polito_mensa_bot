@@ -4,7 +4,6 @@ Utilities per elaborazione immagini - Versione Ottimizzata
 import os
 from PIL import Image, ImageDraw, ImageFont
 from typing import Tuple, Optional, Union
-from utils.translate_text import translate_text
 from config.constants import (
     IMAGE_WIDTH, IMAGE_HEIGHT, BG_COLOR, TEXT_COLOR, IMAGE_MARGIN
 )
@@ -108,7 +107,7 @@ async def create_long_image(
     output_path: str,
     logo_text: Optional[str] = "@RunMensaBot on telegram",
     add_logo: bool = True,
-    logo_image_path: Optional[str] = "assets/run_logo.png"
+    logo_image_path: Optional[str] = "assets/run_logo.png",
 ) -> str:
     # Setup
     image = Image.new("RGB", (IMAGE_WIDTH, IMAGE_HEIGHT), color=BG_COLOR)
@@ -157,19 +156,6 @@ async def create_long_image(
             align="center"
         )
         curr_y += line_h + 30
-
-    # Footer
-    footer_note = await translate_text("Verificare la presenza di allergeni presso i locali della mensa.", dest_language="en")
-    draw.line((IMAGE_MARGIN, IMAGE_HEIGHT - 200, IMAGE_WIDTH - IMAGE_MARGIN, IMAGE_HEIGHT - 200), fill=TEXT_COLOR, width=3)
-    
-    bbox_f = draw.multiline_textbbox((0, 0), footer_note, font=font_footer, align="center")
-    draw.multiline_text(
-        ((IMAGE_WIDTH - (bbox_f[2] - bbox_f[0])) // 2, IMAGE_HEIGHT - 160), 
-        footer_note, 
-        fill=TEXT_COLOR, 
-        font=font_footer, 
-        align="center"
-    )
 
     # Logo
     if add_logo:
