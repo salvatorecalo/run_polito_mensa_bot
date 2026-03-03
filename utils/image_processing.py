@@ -7,6 +7,9 @@ from typing import Tuple, Optional, Union
 from config.constants import (
     IMAGE_WIDTH, IMAGE_HEIGHT, BG_COLOR, TEXT_COLOR, IMAGE_MARGIN
 )
+from utils.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 try:
     import cairosvg
@@ -115,7 +118,6 @@ async def create_long_image(
     font_title = _get_font(60)
     font_section_title = _get_font(45)
     font_items = _get_font(30)
-    font_footer = _get_font(30)
     headers_keywords = ["PRIMI", "SECONDI", "CONTORNI", "PIATTO UNICO"]
     banned_words = ["EDISU PIEMONTE", "STUDIO UNIVERSITARIO", "MENSA UNIVERSITARIA", "ENTE REGIONALE", "DIRITTO"]
     # Pulizia testo
@@ -134,6 +136,8 @@ async def create_long_image(
     
     for line in lines[1:]:
         if any(keyword in line for keyword in banned_words):
+            logger.info("Banned word find")
+            
             continue
         is_header = any(keyword in line for keyword in headers_keywords)
         
