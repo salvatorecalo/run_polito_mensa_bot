@@ -70,6 +70,8 @@ class NotificationService:
                 # IL PROBLEMA STA QUI
                 image_path = menu.image_path
                 for user in canteen_users:
+                    if not user.is_active:
+                        continue
                     try:
                         # Send message (asynchronous Telegram API calls)
                         if image_path:
@@ -83,7 +85,11 @@ class NotificationService:
                                 await self.telegram.send_message(
                                     chat_id=user.telegram_id, text=caption
                                 )
+                            await asyncio.sleep(0.05)
                     except Exception as e:
+                        if "403" in str(e) or "Forbidden" in str(e):
+                            logger.warning(f"🚫 L'utente {user.telegram_id} ha bloccato il bot. Lo disattivo nel DB.")
+                            await user_repo.update_status(user.telegram_id, is_active=False)
                         # Log error but continue with next user (don't break the loop)
                         logger.error(
                             f"❌ Failed to send to user {user.telegram_id}: {e}"
