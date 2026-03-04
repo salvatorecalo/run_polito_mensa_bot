@@ -137,7 +137,6 @@ async def create_long_image(
     for line in lines[1:]:
         if any(keyword in line for keyword in banned_words):
             logger.info("Banned word find")
-            
             continue
         is_header = any(keyword in line for keyword in headers_keywords)
         
