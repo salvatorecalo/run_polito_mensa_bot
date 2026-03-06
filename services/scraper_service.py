@@ -5,6 +5,7 @@ import base64
 from typing import List, Optional, Tuple
 from datetime import datetime
 import requests
+from config.constants import COMMON_LANGS
 from services import AiModel
 from utils import normalize_text, store_canteen_match
 from utils.file_operations import clean_directory
@@ -18,7 +19,7 @@ from utils.logger import setup_logger
 from services.web_scraping_service import WebScrapingService
 import hashlib
 import re
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image, ImageEnhance
 
 logger = setup_logger(__name__)
 
@@ -188,34 +189,33 @@ async def process_image_url(
             logger.error(f"❌ Matched canteen '{matched_canteen.name}' has no ID")
             return "error"
         
-        img_path = os.path.join(
-            CREATED_IMAGES_DIR,
-            f"menu_{matched_canteen.id}_{get_today_date().strftime('%Y%m%d')}_{meal_type}.jpg"
-        )
+        generated_images = {}
+        clean_text = html.unescape(re.sub(r'<[^>]+>', '', text))
+        full_text_prepared = f"{matched_canteen.name}\n\n{clean_text}"
         
-        menu_text_for_img = f"{matched_canteen.name}\n\n{text}"
-        # Puliamo eventuali tag se presenti
-        clean_text = html.unescape(re.sub(r'<[^>]+>', '', menu_text_for_img))
+        for language in COMMON_LANGS: 
+            lang_img_path = os.path.join(
+                CREATED_IMAGES_DIR,
+                f"menu_{matched_canteen.id}_{get_today_date().strftime('%Y%m%d')}_{meal_type}_{language}.jpg"
+            )
 
-        created_path = await create_long_image(
-            text=clean_text,
-            output_path=img_path,
-            logo_text="@RunMensaBot on telegram",
-            add_logo=True,
-            logo_image_path="assets/run_logo.png"
-        )
+            created_path = await create_long_image(
+                text=full_text_prepared,
+                output_path=lang_img_path,
+                logo_text="@RunMensaBot on telegram",
+                add_logo=True,
+                logo_image_path="assets/run_logo.png",
+                language=language,
+            )
+            generated_images[language] = created_path
             
+        primary_path = generated_images.get("it", list(generated_images.values())[0])
         # Prepare menu data
         courses_json = {
             "raw_lines": [line.strip() for line in text.split("\n") if line.strip()],
-            "meta": {
-                "source": "web_mirror",
-                "url": url,
-                "extracted_at": datetime.now().isoformat(),
-                "confidence_score": best_score
-            }
+            "image_paths": generated_images,
+            "meta": { "source": "web_mirror", "confidence_score": best_score }
         }
-
         # Check if menu already exists
         existing_menu = await menu_repo.get_menu_by_date(
             get_today_date(), 
@@ -227,7 +227,7 @@ async def process_image_url(
             # Update existing menu
             logger.info(f"🔄 Updating existing menu for {matched_canteen.name}")
             existing_menu.original_text = text
-            existing_menu.image_path = created_path
+            existing_menu.image_path = primary_path
             existing_menu.courses_json = courses_json
             await menu_repo.update(existing_menu)
         else:
@@ -239,7 +239,7 @@ async def process_image_url(
                 meal_type=meal_type,
                 courses_json=courses_json,
                 original_text=text,
-                image_path=created_path,
+                image_path=primary_path,
                 story_id=f"web_{int(datetime.now().timestamp())}_{matched_canteen.id}"
             )
             await menu_repo.create(new_menu)

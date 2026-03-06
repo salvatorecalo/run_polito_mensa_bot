@@ -21,3 +21,11 @@ SCHEDULE_TIMES = [
     {"hour": 11, "minute": 25},  # Lunch
     {"hour": 20, "minute": 0}     # Dinner
 ]
+
+COMMON_LANGS = {
+    'it': 'Italiano 🇮🇹',
+    'en': 'English 🇬🇧',
+    'es': 'Español 🇪🇸',
+    'fr': 'Français 🇫🇷',
+    'de': 'Deutsch 🇩🇪'
+}

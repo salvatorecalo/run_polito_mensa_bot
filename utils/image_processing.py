@@ -7,6 +7,7 @@ from typing import Tuple, Optional, Union
 from config.constants import (
     IMAGE_WIDTH, IMAGE_HEIGHT, BG_COLOR, TEXT_COLOR, IMAGE_MARGIN
 )
+from utils.translate_text import translate_text
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -111,46 +112,51 @@ async def create_long_image(
     logo_text: Optional[str] = "@RunMensaBot on telegram",
     add_logo: bool = True,
     logo_image_path: Optional[str] = "assets/run_logo.png",
+    language: str = "it",
 ) -> str:
-    # Setup
+    italian_headers = ["PRIMI", "SECONDI", "CONTORNI", "PIATTO UNICO", "FRUTTA", "DESSERT"]
+    banned_words = ["EDISU PIEMONTE", "STUDIO UNIVERSITARIO", "MENSA UNIVERSITARIA", "ENTE REGIONALE", "DIRITTO"]
+    title = [line.strip().upper() for line in text.split('\n') if line.strip()][0].replace("MENSA UNIVERSITARIA", "").strip()
+    if language != "it":
+        logger.info(f"🌍 Traduzione integrale in corso ({language})...")
+        text = await translate_text(text=text, dest_language=language)
+        headers_keywords = [await translate_text(text=h, dest_language=language) for h in italian_headers]
+    else:
+        headers_keywords = italian_headers
+
     image = Image.new("RGB", (IMAGE_WIDTH, IMAGE_HEIGHT), color=BG_COLOR)
     draw = ImageDraw.Draw(image)
     font_title = _get_font(60)
     font_section_title = _get_font(45)
     font_items = _get_font(30)
-    headers_keywords = ["PRIMI", "SECONDI", "CONTORNI", "PIATTO UNICO"]
-    banned_words = ["EDISU PIEMONTE", "STUDIO UNIVERSITARIO", "MENSA UNIVERSITARIA", "ENTE REGIONALE", "DIRITTO"]
-    # Pulizia testo
+    
     lines = [line.strip().upper() for line in text.split('\n') if line.strip()]
     if not lines: return ""
 
     curr_y = 150
-    # Titolo
-    title = lines[0].replace("MENSA UNIVERSITARIA", "").replace("DEL POLITECNICO", "").strip()
+    max_w = IMAGE_WIDTH - (IMAGE_MARGIN * 2)
+
     bbox_t = draw.textbbox((0, 0), title, font=font_title)
     draw.text(((IMAGE_WIDTH - (bbox_t[2] - bbox_t[0])) // 2, curr_y), title, fill=TEXT_COLOR, font=font_title)
+    
     curr_y += 100
     draw.line((200, curr_y, IMAGE_WIDTH - 200, curr_y), fill=TEXT_COLOR, width=2)
     curr_y += 60
-    max_w = IMAGE_WIDTH - (IMAGE_MARGIN * 2)
-    
+
     for line in lines[1:]:
         if any(keyword in line for keyword in banned_words):
-            logger.info("Banned word find")
             continue
-        is_header = any(keyword in line for keyword in headers_keywords)
+            
+        is_header = any(keyword.upper() in line for keyword in headers_keywords)
         
-        if is_header:
-            current_font = font_section_title
-            curr_y += 20  
-        else:
-            current_font = font_items
+        current_font = font_section_title if is_header else font_items
+        if is_header: curr_y += 20  
 
         wrapped_line = wrap_text(line, current_font, max_w)
         
         bbox_l = draw.multiline_textbbox((0, 0), wrapped_line, font=current_font, align="center")
-        line_w = bbox_l[2] - bbox_l[0]
-        line_h = bbox_l[3] - bbox_l[1]
+        line_w, line_h = bbox_l[2] - bbox_l[0], bbox_l[3] - bbox_l[1]
+        
         draw.multiline_text(
             ((IMAGE_WIDTH - line_w) // 2, curr_y), 
             wrapped_line, 
@@ -160,11 +166,9 @@ async def create_long_image(
         )
         curr_y += line_h + 30
 
-    # Logo
     if add_logo:
         image = add_watermark(image, watermark_text=logo_text, watermark_image_path=logo_image_path, position="top-left", logo_size=(100, 100))
 
-    # Salvataggio
     if image.mode == 'RGBA': image = image.convert('RGB')
     image.save(output_path, "JPEG", quality=95)
     return output_path

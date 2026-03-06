@@ -70,12 +70,12 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
         await context.bot.send_message(chat_id=chat_id, text=response_text, parse_mode='HTML')
     else:
         for menu in menus:
-            if menu.image_path and os.path.exists(menu.image_path):
-                user_repo = UserRepository(session)
+            images_paths = menu.courses_json.get("image_paths", {}) if menu.courses_json else {}
+            target_image_path = images_paths.get(language, menu.image_path)
+            if target_image_path and os.path.exists(target_image_path):
                 user = await user_repo.get_by_telegram_id(update.effective_user.id)
-                language = user.language if user else "it"
                 translation = await translate_text(meal_type, language)
-                with open(menu.image_path, 'rb') as photo:
+                with open(target_image_path, 'rb') as photo:
                     await context.bot.send_photo(
                         chat_id=chat_id, 
                         photo=photo,
@@ -83,5 +83,10 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
                     )
             else:
                 # Se l'immagine manca per qualche motivo, inviamo il testo come fallback
-                logger.warning(f"Immagine non trovata per menu {menu.id}, invio testo.")
+                translated_error_text = await translate_text(f"Immagine non trovata per lingua {language} nel menu {menu.id}, invio testo.", language)
+                logger.warning(translated_error_text)
+                menu_content = menu.original_text or "Menu vuoto"
+                if language != "it":
+                    trans = await translate_text(menu_content, dest_language=language)
+                    if trans: menu_content = trans
                 await context.bot.send_message(chat_id=chat_id, text=menu.original_text)

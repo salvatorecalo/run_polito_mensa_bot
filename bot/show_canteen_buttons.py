@@ -8,6 +8,7 @@ from bot.start_command import start_command
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
+from config.constants import COMMON_LANGS
 from utils.decorator import inject_db
 from utils.translate_text import translate_text
 from utils.logger import setup_logger
@@ -105,16 +106,8 @@ async def show_language_buttons(update: Update, context: ContextTypes.DEFAULT_TY
     user_repo = UserRepository(session)
     user = await user_repo.get_by_telegram_id(update.effective_user.id)
 
-    common_langs = {
-        'it': 'Italiano 🇮🇹',
-        'en': 'English 🇬🇧',
-        'es': 'Español 🇪🇸',
-        'fr': 'Français 🇫🇷',
-        'de': 'Deutsch 🇩🇪'
-    }
-
     keyboard = [[InlineKeyboardButton(name, callback_data=f"lang_{code}")]
-                for code, name in common_langs.items()]
+                for code, name in COMMON_LANGS.items()]
     keyboard.append([InlineKeyboardButton("🔙 INDIETRO", callback_data="start_back")])
 
     text = "🌍 Seleziona la tua lingua:"
