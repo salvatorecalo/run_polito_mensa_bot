@@ -18,6 +18,8 @@ from utils.logger import setup_logger
 from services.web_scraping_service import WebScrapingService
 import hashlib
 import re
+from PIL import Image, ImageEnhance, ImageOps
+
 logger = setup_logger(__name__)
 
 _ai_instance = None
@@ -29,6 +31,21 @@ def get_ai_model():
         logger.info("🤖 Primo avvio dell'AI: caricamento Groq in corso...")
         _ai_instance = AiModel()
     return _ai_instance
+
+def preprocess_for_ocr(image_path: str):
+    """
+        Aumenta il contrasto e la saturazione al massimo cosi da rimuovere i ghirigori
+    """
+    with Image.open(image_path) as img:
+        img = img.convert('L')
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(3.5)
+        threshold = 140
+        # if the index i is minus than the threshold, the value is black (0) otherwise 255 (white)
+        lut = [0 if i < threshold else 255 for i in range(256)]
+        img = img.point(lut)
+        img.save(image_path, "PNG")
+    
 
 def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
     """
@@ -60,11 +77,12 @@ def _download_and_ocr_sync(url: str) -> Tuple[Optional[str], bool]:
                 response.raise_for_status()
                 with open(path, "wb") as f:
                     f.write(response.content)
-                logger.debug(f"✅ Image saved to {path}")
+                logger.info(f"Preprocessing image for OCR: {path}")
+                preprocess_for_ocr(path)
+                logger.debug(f"✅ Image saved and cleaned at {path}")
             except Exception as e:
                 logger.error(f"❌ Download error for {url[:100]}: {e}")
                 return None, False
-
     ai = get_ai_model()
     # OCR extraction with Groq Llama model
     try:
@@ -157,7 +175,7 @@ async def process_image_url(
                 best_score = score
                 best_match = canteen
 
-        if not best_match or best_score < 1:
+        if not best_match or best_score < 10:
             logger.warning(f"⚠️ No reliable canteen match (best score: {best_score})")
             logger.debug(f"Text sample: {text_normalized[:300]}")
             return "skipped"

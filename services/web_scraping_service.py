@@ -11,61 +11,61 @@ class WebScrapingService:
     """
     
     async def get_stories_by_browser(self, username: str="edisu_piemonte"):
-        """
-        Function for downloading stories by a mirror and not direcly from instagram
-        
-        :param username: username of user from which we download stories. If not provided default is edisu_piemonte
-        :type username: str
-        """
-        
-        logger.info(f"🌐 Avvio browser per cercare storie di {username} su mirror web...")
-        stories_urls:list = []
+        logger.info(f"🌐 Avvio browser per storie di {username} su Picuki (SPA Mode)...")
+        stories_urls: list = []
+    
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox']
+                args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
             )
             context = await browser.new_context(
-                user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                viewport={'width': 1280, 'height': 1000}
             )
             page = await context.new_page()
-            target_url = f"https://storynavigation.com/user/{username}"
+            target_url = "https://www.picuki.site" 
+            
             try:
                 logger.info(f"Navigazione verso {target_url}...")
-                await page.goto(target_url, wait_until='domcontentloaded', timeout=60000)
+                await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
+                input_box = await page.wait_for_selector(".main-form__input", timeout=15000)
+                await input_box.fill(username)
+                await page.click(".main-form__field-download")
+                logger.info("⏳ Attendendo il rendering del profilo...")
+                await page.wait_for_selector(".profile-info, .tabs-component", timeout=20000)
+                tab_stories = page.locator(".tabs-component__button").filter(has_text=re.compile(r"stories", re.I)).first
                 
-                cookie_button = page.get_by_text("Conenti", exact=False)
-                if await cookie_button.is_visible(timeout=5000):
-                    await cookie_button.click()
-                    logger.info("🍪 Popup cookie rimosso con successo!")
-                    await page.wait_for_timeout(1000)
-                await page.wait_for_selector(".profile-stories-item img", timeout=10000)
-                # Aspetta che appaiano gli elementi delle storie (o i tab)
-                # Nota: I selettori (.story-item, img) cambiano da sito a sito.
-                # Qui cerchiamo immagini che potrebbero essere storie.
-                # A volte bisogna cliccare un tab "Stories". 
-                # Instanavigation di solito le carica di default o dopo lo scroll.
-                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                await asyncio.sleep(3) # Aspetta rendering Javascript
-                # Sul loro sito hanno un div con la classe profile-stories-item che wrappa le img interessate
-                media_elements = await page.locator(".profile-stories-item > img").all()
-                logger.info(f"Trovati questi elementi {media_elements}")
-                for i,elm in enumerate(media_elements):
+                await tab_stories.wait_for(state="visible", timeout=10000)
+                await page.evaluate("window.scrollBy(0, 300)") 
+                await tab_stories.click(force=True) # force=True aiuta se ci sono overlay trasparenti
+                logger.info("🖱️ Tab STORIES cliccato.")
+                
+                img_selector = ".media-content__image"
+                await page.wait_for_selector(img_selector, timeout=15000)
+                await page.evaluate("window.scrollTo(0, 800)")
+                await asyncio.sleep(2) # Pausa necessaria per il caricamento delle immagini reali
+                media_elements = await page.locator(img_selector).all()
+                logger.info(f"Elementi trovati: {media_elements}")
+                logger.info(f"🔎 Elementi trovati: {len(media_elements)}")
+                
+                for i, elm in enumerate(media_elements):
                     url = (
-                        await elm.get_attribute("data-src") or
-                        await elm.get_attribute("data-lazy-src") or
-                        await elm.get_attribute("data-original") or
-                        await elm.get_attribute("src")
-                    )  
-                    if url and not url.startswith("data:image"):
+                        await elm.get_attribute("src") or 
+                        await elm.get_attribute("data-src") or 
+                        await elm.get_attribute("data-original")
+                    )
+                    
+                    if url and not url.startswith("data:image") and ("fbcdn" in url or "instagram" in url):
                         logger.debug(f"  [{i+1}] URL trovato: {url[:80]}")
                         stories_urls.append(url)
-                    else:
-                        logger.warning(f"  [{i+1}] Nessun URL valido (url={url[:50] if url else 'None'})")
-                logger.info(f"✅ Estratti {len(stories_urls)} URL da {len(media_elements)} elementi")
+                
+                logger.info(f"✅ Operazione completata: {len(stories_urls)} storie estratte.")
+
             except Exception as e:
-                logger.error(f"Errore durante lo scraping: {e}")
+                logger.error(f"❌ Errore scraping: {e}")
                 await page.screenshot(path="data/debug_error.png")
             finally:
                 await browser.close()
+                
         return stories_urls
