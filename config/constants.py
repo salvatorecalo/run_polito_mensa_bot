@@ -5,8 +5,6 @@ Costanti dell'applicazione
 # Image dimension
 IMAGE_WIDTH = 1080
 IMAGE_HEIGHT = 1920
-MIN_FONT_SIZE = 40
-MAX_FONT_SIZE = 80
 IMAGE_MARGIN = 60  # Border margin
 
 # Colors (RGB)

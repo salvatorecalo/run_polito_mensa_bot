@@ -12,8 +12,6 @@ __all__ = [
     'MAX_RETRIES',
     'IMAGE_WIDTH',
     'IMAGE_HEIGHT',
-    'MIN_FONT_SIZE',
-    'MAX_FONT_SIZE',
     'IMAGE_MARGIN',
     'BG_COLOR',
     'TEXT_COLOR',
