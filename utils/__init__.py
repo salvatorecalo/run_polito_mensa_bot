@@ -11,6 +11,8 @@ from .store_canteen_match import store_canteen_match
 from .today import get_today_date
 from .is_holiday import is_holiday
 from .setup_data_folder import setup_data_folder
+from .define_all_handlers import define_all_handlers
+from .shutdown import shutdown
 
 __all__ = [
     'setup_logger',
@@ -23,5 +25,7 @@ __all__ = [
     'store_canteen_match',
     'get_today_date',
     "is_holiday",
-    "setup_data_folder"
+    "setup_data_folder",
+    "define_all_handlers",
+    "shutdown"
 ]

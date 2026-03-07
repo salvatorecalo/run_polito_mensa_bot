@@ -60,6 +60,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, se
         await start_command(update, context)
     elif data == "cancel":
         await user_repo.update_status(user_id, is_active=False)
-        await query.edit_message_text("👋 Ti sei disiscritto correttamente. Invia /start per tornare.")
+        await query.edit_message_text("👋 Ti sei disiscritto correttamente. Invia /start per riscriverti di nuovo.")
     elif data == "start_back":
         await start_command(update, context)
