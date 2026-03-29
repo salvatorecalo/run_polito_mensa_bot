@@ -114,9 +114,9 @@ async def create_long_image(
     logo_image_path: Optional[str] = "assets/run_logo.png",
     language: str = "it",
 ) -> str:
-    italian_headers = ["PRIMI", "SECONDI", "CONTORNI", "PIATTO UNICO", "FRUTTA", "DESSERT"]
-    banned_words = ["EDISU PIEMONTE", "STUDIO UNIVERSITARIO", "MENSA UNIVERSITARIA", "ENTE REGIONALE", "DIRITTO"]
-    title = [line.strip().upper() for line in text.split('\n') if line.strip()][0].replace("MENSA UNIVERSITARIA", "").strip()
+    italian_headers = ["Primi", "Secondi", "Contorni", "Piatto unico", "Frutta", "Dessert"]
+    banned_words = ["edisu piemonte", "studio universitario", "mensa universitaria", "ente regionale", "diritto", "borsellino", "villa", "claretta", "olimpia", "castelfidardo", "principe", "amedeo"]
+    title = [line.strip().capitalize() for line in text.split('\n') if line.strip()][0].replace("Mensa universitaria", "").strip().capitalize()
     if language != "it":
         logger.info(f"🌍 Traduzione integrale in corso ({language})...")
         text = await translate_text(text=text, dest_language=language)
@@ -130,7 +130,7 @@ async def create_long_image(
     font_section_title = _get_font(45)
     font_items = _get_font(30)
     
-    lines = [line.strip().upper() for line in text.split('\n') if line.strip()]
+    lines = [line.strip().capitalize() for line in text.split('\n') if line.strip()]
     if not lines: return ""
 
     curr_y = 150
@@ -144,15 +144,15 @@ async def create_long_image(
     curr_y += 60
 
     for line in lines[1:]:
-        if any(keyword in line for keyword in banned_words):
+        if any(keyword.lower() in line.lower() for keyword in banned_words):
             continue
             
-        is_header = any(keyword.upper() in line for keyword in headers_keywords)
+        is_header = any(keyword.lower() in line.lower() for keyword in headers_keywords)
         
         current_font = font_section_title if is_header else font_items
         if is_header: curr_y += 20  
-
-        wrapped_line = wrap_text(line, current_font, max_w)
+        logger.info(f"Capitalized line {line.capitalize()}")
+        wrapped_line = wrap_text(line.capitalize(), current_font, max_w)
         
         bbox_l = draw.multiline_textbbox((0, 0), wrapped_line, font=current_font, align="center")
         line_w, line_h = bbox_l[2] - bbox_l[0], bbox_l[3] - bbox_l[1]
