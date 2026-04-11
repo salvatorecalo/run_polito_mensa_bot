@@ -3,13 +3,16 @@ Notification Service: Sends menus from Database to Telegram Subscribers
 """
 
 import asyncio
+import os
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from utils.logger import setup_logger
 from database.connection import get_session
 from database.models import Menu
 from database.repositories import CanteenRepository, MenuRepository, UserRepository
 from services.telegram_service import TelegramService
 from utils.today import get_today_date
+from utils.translate_text import translate_text
 logger = setup_logger(__name__)
 
 
@@ -25,7 +28,7 @@ class NotificationService:
         logger.info("📤 Starting daily menu notification...")
 
         # Determine meal type (Lunch < 15:00 <= Dinner)
-        current_hour = datetime.now().hour
+        current_hour = datetime.now(ZoneInfo("Europe/Rome")).hour
         meal_type = "lunch" if current_hour < 15 else "dinner"
 
         async for session in get_session():
@@ -44,7 +47,7 @@ class NotificationService:
             for canteen_id, canteen_users in users_by_canteen.items():
                 # Fetch menu for this canteen
                 menu = await menu_repo.get_menu_by_date(get_today_date(), canteen_id, meal_type)
-
+                
                 if not menu:
                     logger.info(f"ℹ️ No {meal_type} menu found for canteen {canteen_id}")
                     continue
@@ -61,26 +64,40 @@ class NotificationService:
                 if not canteen.name:
                     logger.info("No canteen name found")
                 canteen_name = canteen.name
-                caption = self._format_menu_caption(menu, canteen_name)
-                # IL PROBLEMA STA QUI
-                image_path = menu.image_path
+                
                 for user in canteen_users:
                     if not user.is_active:
                         continue
+                    
+                    # Get user language
+                    language = user.language if user.language else "it"
+                    
+                    # Format caption with user's language
+                    caption = await self._format_menu_caption(menu, canteen_name, language)
+                    
+                    # Get image path for user's language
+                    image_paths = menu.courses_json.get("image_paths", {}) if menu.courses_json else {}
+                    target_image_path = image_paths.get(language, menu.image_path)
+                    
                     try:
                         # Send message (asynchronous Telegram API calls)
-                        if image_path:
+                        if target_image_path and os.path.exists(target_image_path):
                             if user.image_or_text == "image":
                                 await self.telegram.send_photo(
                                     chat_id=user.telegram_id,
-                                    photo_path=image_path,
+                                    photo_path=target_image_path,
                                     caption=caption,
                                 )
                             else:
                                 await self.telegram.send_message(
                                     chat_id=user.telegram_id, text=caption
                                 )
-                            await asyncio.sleep(0.05)
+                        else:
+                            # Fallback to text if image doesn't exist
+                            await self.telegram.send_message(
+                                chat_id=user.telegram_id, text=caption
+                            )
+                        await asyncio.sleep(0.05)
                     except Exception as e:
                         if "403" in str(e) or "Forbidden" in str(e):
                             logger.warning(f"🚫 L'utente {user.telegram_id} ha bloccato il bot. Lo disattivo nel DB.")
@@ -92,27 +109,28 @@ class NotificationService:
 
         logger.info("✅ Notification cycle completed.")
 
-    def _format_menu_caption(self, menu: Menu, canteen_name: str) -> str:
-        """Formats the menu into a readable Telegram message"""
+    async def _format_menu_caption(self, menu: Menu, canteen_name: str, language: str = "it") -> str:
+        """Formats the menu into a readable Telegram message, translated to user's language"""
+        meal_type_translated = await translate_text(menu.meal_type.capitalize(), language)
         text = f"🍽️ *{canteen_name}*\n"
         text += (
-            f"📅 {menu.date.strftime('%d/%m/%Y')} - {menu.meal_type.capitalize()}\n\n"
+            f"📅 {menu.date.strftime('%d/%m/%Y')} - {meal_type_translated}\n\n"
         )
 
-
-            # Fallback to JSON
-        courses = menu.courses_json
-        if isinstance(courses, dict):
-            for dishes in courses.values():
-
-                if isinstance(dishes, list):
-                    for dish in dishes:
-                        text += f"{dish}\n"
-                elif isinstance(dishes, str):
-                    text += f"{dishes}\n"
-
-                text += "\n"
+        # Get menu content - prioritize original_text for proper translation
+        menu_content = menu.original_text or "Menu vuoto"
+        if language != "it":
+            try:
+                translated_content = await translate_text(menu_content, language)
+                if translated_content:
+                    menu_content = translated_content
+            except Exception as e:
+                logger.warning(f"Failed to translate menu content to {language}: {e}")
+        
+        text += menu_content
+        text += "\n\n"
 
         # Add footer
-        text += "\n_Buon appetito! 😋_"
+        footer = await translate_text("Buon appetito! 😋", language)
+        text += f"_{footer}_"
         return text
