@@ -27,12 +27,20 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sess
 
     language = user.language
     text = f"👋 Ciao {user.first_name}! Benvenuto nel bot della mensa del PoliTo.\n\nUsa i pulsanti qui sotto per gestire il tuo profilo e vedere il menu."
-    
+    language = user.language
+    translated_messages = [
+        await translate_text("🍽️ MENU DI OGGI", language),
+        await translate_text("📍 GESTISCI MENSE", language),
+        await translate_text("🌍 LINGUA", language),
+        await translate_text("🖼️ FORMATO", language),
+        await translate_text("❌ DISISCRIVITI", language)
+    ]
+
     keyboard = [
-        [InlineKeyboardButton("🍽️ MENU DI OGGI", callback_data="menu")],
-        [InlineKeyboardButton("📍 GESTISCI MENSE", callback_data="subscribe_canteen")],
-        [InlineKeyboardButton("🌍 LINGUA", callback_data="set_language"), InlineKeyboardButton("🖼️ FORMATO", callback_data="get_format")],
-        [InlineKeyboardButton("❌ DISISCRIVITI", callback_data="cancel")],
+        [InlineKeyboardButton(translated_messages[0], callback_data="menu")],
+        [InlineKeyboardButton(translated_messages[1], callback_data="subscribe_canteen")],
+        [InlineKeyboardButton(translated_messages[2], callback_data="set_language"), InlineKeyboardButton(translated_messages[3], callback_data="get_format")],
+        [InlineKeyboardButton(translated_messages[4], callback_data="cancel")],
     ]
     
     translated = await translate_text(text, language)

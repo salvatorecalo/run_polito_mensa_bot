@@ -10,7 +10,7 @@ async def translate_text(text: str, dest_language: str) -> str:
         if not text or not dest_language or dest_language == "it":
             return text
         
-        # Preserva i comandi durante la traduzione
+        # Keeps bot commands during translation
         command_pattern = r'(/[a-zA-Z_]+)'
         commands = re.findall(command_pattern, text)
         text_with_placeholders = text

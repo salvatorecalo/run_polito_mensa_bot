@@ -138,11 +138,19 @@ async def get_user_image_or_text_option(update: Update, context: ContextTypes.DE
     if not session or not update.effective_user or not update.effective_message: return
     user_repo = UserRepository(session)
     user = await user_repo.get_by_telegram_id(update.effective_user.id)
-    
+    if not user:
+        await update.effective_message.reply_text("❌ Utente non trovato.")
+        return
+    language = user.language
+    translated_messages = [
+        await translate_text("📝 SOLO TESTO", language), 
+        await translate_text("🖼️ IMMAGINE", language), 
+        await translate_text("🔙 INDIETRO", language)
+    ]
     keyboard = [
-        [InlineKeyboardButton("📝 SOLO TESTO", callback_data="set_format_text")],
-        [InlineKeyboardButton("🖼️ IMMAGINE", callback_data="set_format_image")],
-        [InlineKeyboardButton("🔙 INDIETRO", callback_data="start_back")]
+        [InlineKeyboardButton(translated_messages[0], callback_data="set_format_text")],
+        [InlineKeyboardButton(translated_messages[1], callback_data="set_format_image")],
+        [InlineKeyboardButton(translated_messages[2], callback_data="start_back")]
     ]
     text = f"Attualmente ricevi il menu come: <b>{user.image_or_text.upper() if user else 'TEXT'}</b>\n\nCome preferisci riceverlo?"
     translated = await translate_text(text, user.language if user else "it")
