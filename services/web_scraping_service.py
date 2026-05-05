@@ -23,6 +23,7 @@ class WebScrapingService:
                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
                 viewport={'width': 1280, 'height': 1000}
             )
+            context.on("page", lambda new_page: asyncio.create_task(new_page.close()))
             page = await context.new_page()
             target_url = "https://www.picuki.site" 
             
