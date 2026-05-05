@@ -10,7 +10,7 @@ class WebScrapingService:
     Servizio per scaricare da siti mirror pubblici
     """
     
-    async def get_stories_by_browser(self, username: str="edisu_piemonte"):
+    async def get_stories_by_browser(self, username: str="edisupiemonte"):
         logger.info(f"🌐 Avvio browser per storie di {username} su Picuki (SPA Mode)...")
         stories_urls: list = []
     
@@ -33,7 +33,7 @@ class WebScrapingService:
                 await input_box.fill(username)
                 await page.click(".main-form__field-download")
                 logger.info("⏳ Attendendo il rendering del profilo...")
-                await page.wait_for_selector(".profile-info, .tabs-component", timeout=20000)
+                await page.wait_for_selector(".output-info, .tabs-component", timeout=20000)
                 tab_stories = page.locator(".tabs-component__button").filter(has_text=re.compile(r"stories", re.I)).first
                 
                 await tab_stories.wait_for(state="visible", timeout=10000)
