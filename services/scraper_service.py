@@ -281,7 +281,7 @@ async def fetch_and_store_menus() -> None:
     try:
         # Fetch story URLs from mirror site
         logger.info("🔍 Fetching stories from web mirror...")
-        username = os.getenv("TARGET_USER", "edisu_piemonte")
+        username = os.getenv("TARGET_USER", "edisupiemonte")
         urls = await service.get_stories_by_browser(username=username)
         
         if not urls:
