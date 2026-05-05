@@ -45,7 +45,7 @@ async def main():
         logger.info("🤖 Initializing Bot...")
         await app.initialize()
         await app.start()
-        await set_admins(["6638746092", "238016214"])
+        await set_admins(["6638746092", "238016214", "322125458"])
         async for session in get_session():
              canteen_repo = CanteenRepository(session)
              canteens = await canteen_repo.get_all_active()
