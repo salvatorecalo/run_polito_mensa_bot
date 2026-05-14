@@ -34,8 +34,8 @@ async def main():
         await create_db_and_tables()
         scheduler = BotScheduler()
         # Schedule task for 11:25 and 20:00 (approx, you need to see it one hour before because our server is one our before timezone!)
-        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 10, 45)
-        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 17, 55)
+        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 11, 45)
+        scheduler.add_daily_task(lambda: asyncio.run_coroutine_threadsafe(scheduled_task(), loop), 18, 55)
         scheduler.start()
         if not TELEGRAM_TOKEN:
             raise ValueError("TELEGRAM_TOKEN is not set in environment variables")
