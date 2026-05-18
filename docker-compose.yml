@@ -4,9 +4,9 @@ services:
     container_name: polito-mensa-bot
     restart: unless-stop
     environment:
-      - TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
-      - TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
-      - TARGET_USER: ${TARGET_USER}
-      - TZ: "Europe/Rome"
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      TARGET_USER: ${TARGET_USER}
+      TZ: "Europe/Rome"
     volumes:
       - ./data:/workspace/data
