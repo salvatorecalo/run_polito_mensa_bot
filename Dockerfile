@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     git curl build-essential libssl-dev libffi-dev python3-dev \
     libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 libgl1 \
     tesseract-ocr tesseract-ocr-eng tesseract-ocr-ita \
-    ffmpeg sudo vim \
+    ffmpeg sudo vim tzdata \
     # Librerie necessarie per Playwright/Chromium
     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
     libxcomposite1 libxdamage1 libxrandr2 libgbm1 libasound2 libgtk-3-0 \

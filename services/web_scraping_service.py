@@ -31,6 +31,9 @@ class WebScrapingService:
                 logger.info(f"Navigazione verso {target_url}...")
                 await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
                 input_box = await page.wait_for_selector(".main-form__input", timeout=15000)
+                if not input_box:
+                    logger.error("No input box found")
+                    return
                 await input_box.fill(username)
                 await page.click(".main-form__field-download")
                 logger.info("⏳ Attendendo il rendering del profilo...")
