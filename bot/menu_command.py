@@ -50,7 +50,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, sessi
     
     menus = await menu_repo.get_menus_by_date_for_canteens(get_today_date(), user.selected_canteen_ids, meal_type)
     if not menus:
-        text = f"📅 Nessun menu disponibile per il {get_today_date().strftime('%d/%m')} ({meal_type}). Aspetta le 11:45 di pomeriggio o le 19:00 di sera per riprovare."
+        text = f"📅 Nessun menu disponibile per il {get_today_date().strftime('%d/%m')} ({meal_type}). Aspetta le 11:50 di pomeriggio o le 18:35 di sera per riprovare."
         translated = await translate_text(text, language)
         await context.bot.send_message(chat_id=chat_id, text=translated)
         return

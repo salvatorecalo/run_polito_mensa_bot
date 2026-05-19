@@ -16,8 +16,8 @@ TELEGRAM_BATCH_SIZE = 10  # Telegram limit for media group
 
 # Scheduling (times for menu to be sent)
 SCHEDULE_TIMES = [
-    {"hour": 11, "minute": 25},  # Lunch
-    {"hour": 20, "minute": 0}     # Dinner
+    {"hour": 11, "minute": 45},  # Lunch
+    {"hour": 18, "minute": 30}     # Dinner
 ]
 
 COMMON_LANGS = {

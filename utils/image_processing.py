@@ -151,7 +151,6 @@ async def create_long_image(
         
         current_font = font_section_title if is_header else font_items
         if is_header: curr_y += 20  
-        logger.info(f"Capitalized line {line.capitalize()}")
         wrapped_line = wrap_text(line.capitalize(), current_font, max_w)
         
         bbox_l = draw.multiline_textbbox((0, 0), wrapped_line, font=current_font, align="center")

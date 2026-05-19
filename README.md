@@ -8,8 +8,8 @@ Bot Telegram che monitora automaticamente le stories Instagram delle mense Edisu
 - **Estrazione del testo** dai menu usando groq ai, perchè le immagini che carica attualmente edisu sono difficili da estrapolare con semplice tesseract (22/01/2026)
 - **Traduzione automatica** nella lingua scelta dall'utente usando il pacchetto googletrans
 - **Invio programmato** su Telegram agli orari dei pasti:
-  - 🍝 **11:25** - Menu pranzo
-  - 🍕 **19:00** - Menu cena
+  - 🍝 **11:45** - Menu pranzo
+  - 🍕 **18:45** - Menu cena
 - **Sistema di iscrizioni** per ricevere aggiornamenti automatici
 - **Supporto gruppi** - Aggiungi il bot a un gruppo Telegram
 
