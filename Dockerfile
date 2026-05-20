@@ -28,7 +28,7 @@ ENV PIP_USER=true
 ENV PIP_NO_CACHE_DIR=1
 
 # Creazione cartelle con i permessi corretti per lo sviluppo e per il server
-RUN mkdir -p /workspace/data /workspace/download/stories /workspace/created_images \
+RUN mkdir -p /workspace/data /workspace/download/stories \
     && chown -R $USERNAME:$USERNAME /workspace
 
 WORKDIR /workspace
